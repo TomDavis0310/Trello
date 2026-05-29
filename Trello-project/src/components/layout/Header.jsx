@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import Button from '../ui/Button'
 import useAuthStore from '../../store/authStore'
 import useUiStore from '../../store/uiStore'
@@ -6,6 +6,7 @@ import useUiStore from '../../store/uiStore'
 export default function Header() {
   const { user, logout } = useAuthStore()
   const toggleSidebar = useUiStore((s) => s.toggleSidebar)
+  const navigate = useNavigate()
 
   return (
     <header className="header">
@@ -21,7 +22,7 @@ export default function Header() {
         {user ? (
           <>
             <span>{user.name}</span>
-            <Button variant="ghost" onClick={logout}>
+            <Button variant="ghost" onClick={() => { logout(); navigate('/login') }}>
               Logout
             </Button>
           </>

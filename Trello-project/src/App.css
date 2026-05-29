@@ -294,7 +294,30 @@
   gap: 12px;
 }
 
+/* Dashboard */
+.dashboard-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.dashboard-header h1 {
+  margin: 0;
+  font-size: 28px;
+}
+
+.empty-state {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.board-card-wrapper {
+  position: relative;
+}
+
 .board-card {
+  display: block;
   background: var(--accent-bg);
   border: 1px solid var(--accent-border);
   border-radius: 8px;
@@ -303,8 +326,174 @@
   color: var(--text-h);
   cursor: pointer;
   text-align: center;
+  text-decoration: none;
 }
 
-.board-card:hover {
-  opacity: 0.85;
+.board-delete-btn,
+.list-delete-btn,
+.card-delete-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  color: var(--text);
+  padding: 2px 6px;
+  border-radius: 4px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s;
+}
+
+.board-card-wrapper:hover .board-delete-btn,
+.board-column-wrapper:hover .list-delete-btn,
+.card:hover .card-delete-btn {
+  opacity: 1;
+}
+
+.board-delete-btn:hover,
+.list-delete-btn:hover,
+.card-delete-btn:hover {
+  background: var(--code-bg);
+  color: var(--text-h);
+}
+
+/* CRUD form inside modal */
+.crud-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.crud-form input {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 14px;
+  background: var(--bg);
+  color: var(--text-h);
+}
+
+.crud-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* Board page header */
+.board-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.board-header-row h1 {
+  margin: 0;
+  cursor: pointer;
+  font-size: 24px;
+}
+
+.board-header-row h1:hover {
+  opacity: 0.7;
+}
+
+.board-title-input {
+  padding: 6px 10px;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 24px;
+  font-weight: 700;
+  background: var(--bg);
+  color: var(--text-h);
+  width: 100%;
+  max-width: 400px;
+}
+
+/* Add list form */
+.add-list-form {
+  min-width: 280px;
+  max-width: 280px;
+}
+
+.add-list-form input,
+.add-card-form input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 14px;
+  background: var(--code-bg);
+  color: var(--text-h);
+  box-sizing: border-box;
+}
+
+.add-list-form input:focus,
+.add-card-form input:focus {
+  border-color: var(--accent);
+  outline: none;
+  background: var(--bg);
+}
+
+/* Board column wrapper */
+.board-column-wrapper {
+  position: relative;
+}
+
+/* Card editing */
+.card--editing {
+  padding: 4px;
+}
+
+.card--editing input {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 14px;
+  background: var(--bg);
+  color: var(--text-h);
+  box-sizing: border-box;
+}
+
+/* Card delete button */
+.card {
+  position: relative;
+}
+
+.card-delete-btn {
+  top: 2px;
+  right: 2px;
+  font-size: 14px;
+}
+
+/* Drag & Drop */
+.board-column--drag-over {
+  outline: 2px dashed var(--accent);
+  outline-offset: -2px;
+  background: var(--accent-bg);
+}
+
+.card.dragging {
+  opacity: 0.5;
+}
+
+.sidebar-home {
+  display: block;
+  padding: 6px 8px;
+  border-radius: 4px;
+  text-decoration: none;
+  color: var(--text-h);
+  font-size: 14px;
+  margin-bottom: 12px;
+}
+
+.sidebar-home:hover {
+  background: var(--code-bg);
 }

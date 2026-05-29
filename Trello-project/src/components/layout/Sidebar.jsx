@@ -10,6 +10,7 @@ export default function Sidebar() {
 
   return (
     <aside className="sidebar">
+      <Link to="/" className="sidebar-home">&#9654; Dashboard</Link>
       <h3>Boards</h3>
       <nav>
         {boards.map((board) => (
