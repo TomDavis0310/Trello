@@ -2,16 +2,21 @@ import { create } from "zustand";
 import { api } from "../services/api";
 import useBoardStore from "./boardStore";
 
-// Auth store (Zustand) - chứa user hiện tại và cung cấp các action bất đồng bộ.
-// Store này ủy quyền việc lưu/truy vấn session cho `api.js` (mock localStorage).
+// === Auth Store (Zustand) ===
+// Quản lý session người dùng: user hiện tại, trạng thái xác thực, loading, lỗi.
+// Các action login/register/logout ủy quyền cho `api.js` (giả lập API, lưu localStorage).
+// Khi logout, đồng thời xóa dữ liệu board của session trước để tránh rò rỉ.
 const useAuthStore = create((set) => ({
-  // initial session read from the mock API
+  // --- Trạng thái khởi tạo ---
+  // Đọc user từ session (nếu có) ngay khi store được tạo
   user: api.getCurrentUser(),
   isAuthenticated: !!api.getCurrentUser(),
   isLoading: false,
   error: null,
 
-  // login: gọi `api.login`, cập nhật state khi thành công/không thành công
+  // --- login ---
+  // Gửi email/password đến `api.login`, nếu thành công thì lưu user vào store.
+  // Nếu thất bại, lưu thông báo lỗi để component hiển thị.
   login: async (email, password) => {
     set({ isLoading: true, error: null });
     try {
@@ -22,7 +27,8 @@ const useAuthStore = create((set) => ({
     }
   },
 
-  // register: gọi `api.register` và cập nhật session
+  // --- register ---
+  // Gửi email/password đến `api.register`, API tự động login sau khi tạo tài khoản.
   register: async (email, password) => {
     set({ isLoading: true, error: null });
     try {
@@ -33,15 +39,18 @@ const useAuthStore = create((set) => ({
     }
   },
 
-  // logout: xóa session ở cả API và store
+  // --- logout ---
+  // Gọi API logout (xóa `trello-current-user` khỏi localStorage),
+  // sau đó dùng `clearBoardData` từ boardStore để làm sạch dữ liệu board,
+  // và reset store về trạng thái chưa xác thực.
   logout: () => {
     api.logout();
-    // clear board data to avoid leaking previous session's boards
     const clearBoardData = useBoardStore.getState().clearBoardData;
     if (typeof clearBoardData === "function") clearBoardData();
     set({ user: null, isAuthenticated: false });
   },
 
+  // Xóa thông báo lỗi hiện tại (dùng khi chuyển trang hoặc đóng thông báo)
   clearError: () => set({ error: null }),
 }));
 

@@ -2,9 +2,16 @@ import { useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import Button from './Button'
 
+// === Modal (UI) ===
+// Component modal chung, dùng createPortal để render vào document.body.
+// Tính năng:
+//   - Overlay click hoặc phím Escape để đóng
+//   - Dừng propagation khi click vào nội dung modal
+//   - Props: isOpen, onClose, title, children
 export default function Modal({ isOpen, onClose, title, children }) {
   useEffect(() => {
     if (!isOpen) return
+    // Lắng nghe phím Escape để đóng modal
     const handler = (e) => {
       if (e.key === 'Escape') onClose()
     }

@@ -3,18 +3,25 @@ import { useState } from "react";
 import useBoardStore from "../../../store/boardStore";
 import ConfirmModal from "../../../components/common/ConfirmModal";
 
+// === BoardList ===
+// Component hiển thị danh sách board dưới dạng thẻ (card).
+// Mỗi board có:
+//   - Link điều hướng đến BoardPage `/board/:id`
+//   - Nút × để xóa (có confirm modal)
 export default function BoardList() {
   const boards = useBoardStore((s) => s.boards);
   const deleteBoard = useBoardStore((s) => s.deleteBoard);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pendingBoard, setPendingBoard] = useState(null);
 
+  // Khi click delete: lưu board đang chờ xóa vào state rồi mở modal xác nhận
   const handleDeleteClick = (e, board) => {
     e.preventDefault();
     setPendingBoard(board);
     setConfirmOpen(true);
   };
 
+  // Xác nhận xóa: gọi deleteBoard từ store và đóng modal
   const handleConfirm = () => {
     if (pendingBoard) deleteBoard(pendingBoard.id);
     setConfirmOpen(false);

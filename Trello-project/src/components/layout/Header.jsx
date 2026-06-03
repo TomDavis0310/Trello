@@ -3,14 +3,21 @@ import Button from "../ui/Button";
 import useAuthStore from "../../store/authStore";
 import useUiStore from "../../store/uiStore";
 
+// === Header ===
+// Thanh header trên cùng:
+//   - Nút hamburger (☰) để bật/tắt sidebar (toggleSidebar)
+//   - Logo "Trello" – link về dashboard
+//   - Nếu đã login: hiển thị tên user + nút Logout
+//   - Nếu chưa login: hiển thị nút Log in + Register (link)
 export default function Header() {
   const { user, logout } = useAuthStore();
-  const toggleSidebar = useUiStore((s) => s.toggleSidebar); //
+  const toggleSidebar = useUiStore((s) => s.toggleSidebar);
   const navigate = useNavigate();
 
   return (
     <header className="header">
       <div className="header-left">
+        {/* Nút bật/tắt sidebar */}
         <button className="btn btn--ghost" onClick={toggleSidebar}>
           &#9776;
         </button>
@@ -21,6 +28,7 @@ export default function Header() {
       <div className="header-right">
         {user ? (
           <>
+            {/* User đã đăng nhập */}
             <span>{user.name}</span>
             <Button
               variant="ghost"
@@ -34,6 +42,7 @@ export default function Header() {
           </>
         ) : (
           <>
+            {/* User chưa đăng nhập */}
             <Link to="/login">
               <Button variant="ghost">Log in</Button>
             </Link>

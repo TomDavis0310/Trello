@@ -6,6 +6,12 @@ import Card from "../../../components/ui/Card";
 import ConfirmModal from "../../../components/common/ConfirmModal";
 import { z } from "zod";
 
+// === ListColumn ===
+// Component đại diện cho một cột (list) trên board.
+// Bao gồm:
+//   - useDroppable: vùng thả (drop zone) cho card & list reorder
+//   - useDraggable: kéo phần header list để sắp xếp lại thứ tự
+//   - Nút × để xóa list (có confirm)
 function ListColumn({ list, children, onDelete }) {
   const { setNodeRef: setDroppableRef, isOver } = useDroppable({
     id: `list-${list.id}`,
@@ -35,6 +41,7 @@ function ListColumn({ list, children, onDelete }) {
       className={`board-column-wrapper${isOver ? " board-column--drag-over" : ""}${isDragging ? " board-column--dragging" : ""}`}
     >
       <div className="board-column">
+        {/* Header có thể kéo */}
         <div
           ref={setDraggableRef}
           className="column-header"
@@ -54,6 +61,7 @@ function ListColumn({ list, children, onDelete }) {
             &times;
           </button>
         </div>
+        {/* Các card trong list */}
         <div className="column-cards">
           {children}
         </div>
@@ -78,9 +86,17 @@ function ListColumn({ list, children, onDelete }) {
   );
 }
 
+// === BoardContent ===
+// Nội dung chính của board: hiển thị các cột (list) và các thẻ (card) bên trong.
+// Tích hợp đầy đủ drag & drop (dnd-kit):
+//   - Kéo card giữa các list
+//   - Kéo list để sắp xếp lại thứ tự
+//   - DragOverlay hiển thị preview khi kéo
+// Cũng cung cấp form thêm list mới và input thêm card trong từng list.
 export default function BoardContent({ boardId }) {
   const cards = useBoardStore((s) => s.cards);
   const allLists = useBoardStore((s) => s.lists);
+  // Lọc và sắp xếp list theo boardId + order
   const lists = useMemo(
     () => allLists
       .filter((l) => l.boardId === boardId)
@@ -91,31 +107,36 @@ export default function BoardContent({ boardId }) {
   const createList = useBoardStore((s) => s.createList);
   const deleteList = useBoardStore((s) => s.deleteList);
 
-  const [addingFor, setAddingFor] = useState(null);
+  const [addingFor, setAddingFor] = useState(null); // listId đang mở input thêm card
   const [newTitle, setNewTitle] = useState("");
-  const [activeCard, setActiveCard] = useState(null);
+  const [activeCard, setActiveCard] = useState(null); // card đang được kéo
   const [listName, setListName] = useState("");
 
+  // Schema validate tiêu đề card (Zod)
   const cardSchema = z.object({
     title: z.string().min(1, "Title required").max(200),
   });
 
+  // PointerSensor: yêu cầu di chuột ít nhất 5px mới bắt đầu drag
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 5 },
     }),
   );
 
+  // Mở input thêm card cho list cụ thể
   const openAdd = (listId) => {
     setAddingFor(listId);
     setNewTitle("");
   };
 
+  // Đóng input thêm card
   const closeAdd = () => {
     setAddingFor(null);
     setNewTitle("");
   };
 
+  // Xác nhận thêm card: validate Zod, nếu OK thì gọi createCard
   const submitAdd = () => {
     const parsed = cardSchema.safeParse({ title: newTitle.trim() });
     if (!parsed.success) {
@@ -126,6 +147,7 @@ export default function BoardContent({ boardId }) {
     closeAdd();
   };
 
+  // Submit form thêm list mới
   const handleAddList = (e) => {
     e.preventDefault();
     if (!listName.trim()) return;
@@ -133,6 +155,7 @@ export default function BoardContent({ boardId }) {
     setListName("");
   };
 
+  // Nhóm cards theo listId để render dễ dàng
   const cardsByList = useMemo(() => {
     const map = new Map();
     lists.forEach((l) => map.set(l.id, []));
@@ -143,17 +166,21 @@ export default function BoardContent({ boardId }) {
     return map;
   }, [lists, cards]);
 
+  // === DRAG & DROP HANDLERS ===
+
+  // Khi bắt đầu kéo: lưu card đang kéo vào state (cho DragOverlay)
   const handleDragStart = (event) => {
     setActiveCard(event.active.data.current?.card ?? null);
   };
 
+  // Khi thả: xác định loại (list reorder hay card move)
   const handleDragEnd = (event) => {
     const { active, over } = event;
     setActiveCard(null);
 
     if (!active || !over) return;
 
-    // List reorder
+    // --- Reorder list ---
     if (active.data.current?.list) {
       const overId = String(over.id);
       const overParts = overId.split("-");
@@ -167,7 +194,7 @@ export default function BoardContent({ boardId }) {
       return;
     }
 
-    // Card move
+    // --- Move card ---
     const activeCardId = active.data.current?.card?.id;
     if (!activeCardId) return;
 
@@ -185,6 +212,7 @@ export default function BoardContent({ boardId }) {
     const otherCards = allCards.filter((c) => c.id !== activeCardId);
 
     if (overType === "card") {
+      // Thả lên một card khác → chèn vào vị trí của card đó
       const overCard = allCards.find((c) => c.id === overIdNum);
       if (!overCard) return;
       const targetListId = overCard.listId;
@@ -193,12 +221,14 @@ export default function BoardContent({ boardId }) {
       const targetIndex = overIdx >= 0 ? overIdx : targetListCards.length;
       moveCard(activeCardId, targetListId, targetIndex);
     } else if (overType === "list") {
+      // Thả vào list → chèn vào cuối list
       const targetListId = overIdNum;
       const targetListCards = otherCards.filter((c) => c.listId === targetListId);
       moveCard(activeCardId, targetListId, targetListCards.length);
     }
   };
 
+  // Khi hủy kéo (thả ngoài vùng drop): reset active card
   const handleDragCancel = () => {
     setActiveCard(null);
   };
@@ -211,11 +241,13 @@ export default function BoardContent({ boardId }) {
       onDragCancel={handleDragCancel}
     >
       <div className="board-columns">
+        {/* Render từng list column */}
         {lists.map((list) => (
           <ListColumn key={list.id} list={list} onDelete={deleteList}>
             {(cardsByList.get(list.id) || []).map((card) => (
               <Card key={card.id} card={card} />
             ))}
+            {/* Input / button thêm card mới trong list */}
             <div className="add-card-area">
               {addingFor === list.id ? (
                 <input
@@ -242,6 +274,7 @@ export default function BoardContent({ boardId }) {
           </ListColumn>
         ))}
 
+        {/* Form thêm list mới (ở cuối cùng) */}
         <form className="add-list-form" onSubmit={handleAddList}>
           <input
             placeholder="+ Add list"
@@ -250,6 +283,7 @@ export default function BoardContent({ boardId }) {
           />
         </form>
 
+        {/* DragOverlay: preview card khi kéo */}
         <DragOverlay>
           {activeCard ? (
             <div className="card drag-overlay">{activeCard.title}</div>

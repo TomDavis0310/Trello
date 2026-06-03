@@ -4,6 +4,9 @@ import Button from '../../../components/ui/Button'
 import Modal from '../../../components/ui/Modal'
 import useBoardStore from '../../../store/boardStore'
 
+// === Dashboard Page ===
+// Trang tổng quan hiển thị danh sách các Board.
+// Cho phép tạo board mới qua modal nhập tên.
 export default function DashboardPage() {
   const [showModal, setShowModal] = useState(false)
   const [boardName, setBoardName] = useState('')
@@ -23,7 +26,9 @@ export default function DashboardPage() {
         <h1>My Boards</h1>
         <Button onClick={() => setShowModal(true)}>+ New Board</Button>
       </div>
+      {/* Danh sách các board */}
       <BoardList />
+      {/* Modal tạo board mới */}
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="Create Board">
         <form className="crud-form" onSubmit={handleCreate}>
           <input

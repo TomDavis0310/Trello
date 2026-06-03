@@ -3,16 +3,21 @@ import { Link, useNavigate } from 'react-router-dom'
 import Button from '../../../components/ui/Button'
 import useAuthStore from '../../../store/authStore'
 
+// === Trang Đăng nhập ===
+// Form login đơn giản, dùng `authStore.login` để xác thực.
+// Tự động chuyển hướng đến Dashboard (`/`) nếu đã xác thực.
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const navigate = useNavigate()
   const { login, isLoading, error, isAuthenticated, clearError } = useAuthStore()
 
+  // Xóa lỗi khi component mount (chuyển từ register về login)
   useEffect(() => {
     clearError()
   }, [clearError])
 
+  // Nếu đã đăng nhập, redirect về dashboard
   useEffect(() => {
     if (isAuthenticated) navigate('/', { replace: true })
   }, [isAuthenticated, navigate])

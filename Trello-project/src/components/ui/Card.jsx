@@ -3,6 +3,13 @@ import { useDraggable } from "@dnd-kit/core";
 import useBoardStore from "../../store/boardStore";
 import ConfirmModal from "../common/ConfirmModal";
 
+// === Card (UI) ===
+// Component đại diện cho một card trong list.
+// Tính năng:
+//   - Kéo thả (useDraggable từ @dnd-kit)
+//   - Click vào title để inline edit
+//   - Nút × xóa card (có confirm modal)
+//   - Click vào p (title) để chuyển sang chế độ inline edit
 export default function Card({ card }) {
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(card.title);
@@ -19,6 +26,7 @@ export default function Card({ card }) {
     ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
     : undefined;
 
+  // Lưu title sau khi inline edit
   const handleSave = () => {
     if (title.trim() && title.trim() !== card.title) {
       updateCard(card.id, { title: title.trim() });
@@ -43,6 +51,7 @@ export default function Card({ card }) {
     setShowDeleteModal(false);
   };
 
+  // Chế độ inline edit
   if (editing) {
     return (
       <div className="card card--editing">
@@ -66,6 +75,7 @@ export default function Card({ card }) {
         {...listeners}
         {...attributes}
       >
+        {/* Click vào title để inline edit tiêu đề */}
         <p
           onClick={() => {
             setTitle(card.title);
@@ -74,10 +84,15 @@ export default function Card({ card }) {
         >
           {card.title}
         </p>
+        {/* Nút × xóa card + mở modal */}
+        {/* Remove this button's drag listener to prevent accidental drag on delete click */}
         <button
           className="card-delete-btn"
           title="Delete card"
-          onClick={handleDeleteClick}
+          onClick={(e) => {
+            e.stopPropagation();
+            handleDeleteClick();
+          }}
         >
           &times;
         </button>

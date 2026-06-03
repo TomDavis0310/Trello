@@ -3,16 +3,21 @@ import { Link, useNavigate } from 'react-router-dom'
 import Button from '../../../components/ui/Button'
 import useAuthStore from '../../../store/authStore'
 
+// === Trang Đăng ký ===
+// Form đăng ký tài khoản mới. Gọi `authStore.register`, tự động login sau khi tạo.
+// Giống LoginPage về luồng: tự động redirect sang Dashboard nếu xác thực.
 export default function RegisterPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const navigate = useNavigate()
   const { register, isLoading, error, isAuthenticated, clearError } = useAuthStore()
 
+  // Xóa lỗi khi mount
   useEffect(() => {
     clearError()
   }, [clearError])
 
+  // Redirect nếu đã đăng nhập
   useEffect(() => {
     if (isAuthenticated) navigate('/', { replace: true })
   }, [isAuthenticated, navigate])

@@ -1,6 +1,10 @@
-// Component `Button` (trạng thái hiển thị) dùng trong toàn ứng dụng.
-// - Giữ nhất quán style qua props `variant` và `size`.
-// - Chuyển tiếp các props native của `button` (ví dụ `onClick`, `type`).
+// === Button (UI) ===
+// Component nút dùng chung toàn ứng dụng.
+// Props:
+//   - variant: 'primary' (mặc định) | 'ghost' | 'danger'
+//   - size: 'md' (mặc định)
+//   - disabled: boolean
+//   - ...props: các thuộc tính native của <button> (onClick, type, aria-label, ...)
 export default function Button({
   children,
   variant = "primary",

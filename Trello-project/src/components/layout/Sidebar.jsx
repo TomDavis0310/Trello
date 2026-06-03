@@ -2,6 +2,11 @@ import { Link } from 'react-router-dom'
 import useUiStore from '../../store/uiStore'
 import useBoardStore from '../../store/boardStore'
 
+// === Sidebar ===
+// Thanh bên trái, chỉ hiển thị khi isSidebarOpen = true (uiStore).
+// Gồm:
+//   - Link "Dashboard" về trang chủ
+//   - Danh sách tất cả board (điều hướng nhanh)
 export default function Sidebar() {
   const isOpen = useUiStore((s) => s.isSidebarOpen)
   const boards = useBoardStore((s) => s.boards)

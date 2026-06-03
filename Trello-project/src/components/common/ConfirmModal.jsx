@@ -1,13 +1,14 @@
 import Modal from "../ui/Modal";
 import Button from "../ui/Button";
 
-// Reusable confirmation modal for destructive actions.
+// === ConfirmModal (Common) ===
+// Modal xác nhận dùng cho các hành động nguy hiểm (xóa board, list, card).
 // Props:
-// - isOpen: boolean
-// - onCancel: () => void
-// - onConfirm: () => void
-// - title?: string
-// - message?: React.Node
+//   - isOpen: boolean
+//   - onCancel: () => void  – đóng modal
+//   - onConfirm: () => void – thực thi hành động
+//   - title: string (mặc định "Delete Card")
+//   - message: React node (mặc định thông báo xóa card)
 export default function ConfirmModal({
   isOpen,
   onCancel,

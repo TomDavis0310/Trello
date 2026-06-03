@@ -3,11 +3,15 @@ import Modal from "../ui/Modal";
 import useBoardStore from "../../store/boardStore";
 import { z } from "zod";
 
+// Schema Zod cho mô tả card: tối đa 500 ký tự
 const DescriptionSchema = z
   .string()
   .max(500, "Description must be at most 500 characters")
   .optional();
 
+// === CardDetailBody ===
+// Nội dung bên trong modal chi tiết card.
+// Cho phép xem và chỉnh sửa mô tả (inline edit với textarea + nút Save/Cancel).
 function CardDetailBody({ card, column, onClose }) {
   const updateCardDetail = useBoardStore((s) => s.updateCardDetail);
 
@@ -15,6 +19,7 @@ function CardDetailBody({ card, column, onClose }) {
   const [descDraft, setDescDraft] = useState(card.description || "");
   const [error, setError] = useState(null);
 
+  // Lưu mô tả sau khi validate
   const handleSaveDescription = () => {
     try {
       DescriptionSchema.parse(descDraft);
@@ -30,6 +35,7 @@ function CardDetailBody({ card, column, onClose }) {
 
   return (
     <div className="card-detail-body">
+      {/* Thông tin: cột chứa card + ID */}
       <div className="card-detail-meta">
         <div>
           Column:{" "}
@@ -38,6 +44,7 @@ function CardDetailBody({ card, column, onClose }) {
         <div className="card-detail-id">ID: {card.id}</div>
       </div>
 
+      {/* Mô tả card */}
       <div>
         <h3 className="card-detail-section-title">Description</h3>
         {!isEditingDesc ? (
@@ -99,6 +106,9 @@ function CardDetailBody({ card, column, onClose }) {
   );
 }
 
+// === CardDetailModal ===
+// Modal chi tiết card: tự động mở khi `activeCardId !== null` trong boardStore.
+// Tìm card và column tương ứng, render CardDetailBody bên trong Modal.
 export default function CardDetailModal() {
   const activeCardId = useBoardStore((s) => s.activeCardId);
   const closeCardModal = useBoardStore((s) => s.closeCardModal);

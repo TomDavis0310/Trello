@@ -1,24 +1,30 @@
 import { create } from "zustand";
 import cloneDeep from "lodash/cloneDeep";
 
-// Board store: lưu boards, lists, cards và thực hiện CRUD + persist.
-// Cơ chế persist đơn giản dùng localStorage key `trello-data`.
+// === Board Store (Zustand) ===
+// Store trung tâm quản lý toàn bộ dữ liệu Trello: boards, lists, cards.
+// Tất cả các thay đổi CRUD đều được persist vào localStorage (key `trello-data`).
+// Mỗi action đều gọi `_persist()` sau khi mutate state để duy trì dữ liệu giữa các lần tải lại.
+
 let nextId = 1;
 const genId = () => nextId++;
 
+// Danh sách cột mặc định khi tạo board mới
 const DEFAULT_LISTS = ["Todo", "In Progress", "Review", "Done"];
 
 const useBoardStore = create((set, get) => ({
+  // ============= STATE =============
   boards: [],
   currentBoard: null,
   lists: [],
   cards: [],
-  // activeCardId giữ id của card đang mở modal chi tiết
-  activeCardId: null,
+  activeCardId: null, // ID card đang mở modal chi tiết
   isLoading: false,
   error: null,
 
-  // Đọc dữ liệu đã persist (gọi khi khởi tạo app)
+  // ============= PERSIST (Khởi tạo) =============
+  // fetchBoards: đọc dữ liệu từ localStorage và khôi phục state.
+  // Đồng thời thực hiện migrate: thêm `order` cho các list cũ chưa có.
   fetchBoards: async () => {
     set({ isLoading: true });
     try {
@@ -27,7 +33,7 @@ const useBoardStore = create((set, get) => ({
         const data = JSON.parse(saved);
         nextId = data.nextId;
 
-        // Migrate lists without order field
+        // Migrate: gán order mặc định dựa vào vị trí trong mảng nếu thiếu
         const lists = data.lists || [];
         const boardIds = [...new Set(lists.map((l) => l.boardId))];
         boardIds.forEach((bid) => {
@@ -51,7 +57,7 @@ const useBoardStore = create((set, get) => ({
     }
   },
 
-  // Hàm nội bộ _persist: ghi snapshot state vào localStorage
+  // _persist: ghi snapshot boards + lists + cards + nextId vào localStorage
   _persist: () => {
     const { boards, lists, cards } = get();
     localStorage.setItem(
@@ -62,7 +68,8 @@ const useBoardStore = create((set, get) => ({
 
   setCurrentBoard: (board) => set({ currentBoard: board }),
 
-  /* Board CRUD */
+  // ============= BOARD CRUD =============
+  // Tạo board mới kèm 4 list mặc định (Todo, In Progress, Review, Done)
   createBoard: (name) => {
     const board = { id: genId(), name, createdAt: Date.now() };
     const defaultLists = DEFAULT_LISTS.map((n, i) => ({
@@ -76,6 +83,7 @@ const useBoardStore = create((set, get) => ({
     return board;
   },
 
+  // Cập nhật thông tin board (vd: đổi tên)
   updateBoard: (id, data) => {
     set((state) => ({
       boards: state.boards.map((b) => (b.id === id ? { ...b, ...data } : b)),
@@ -83,8 +91,8 @@ const useBoardStore = create((set, get) => ({
     get()._persist();
   },
 
+  // Xóa board + toàn bộ list và card thuộc board đó
   deleteBoard: (id) => {
-    // remove board + its lists and cards
     set((state) => ({
       boards: state.boards.filter((b) => b.id !== id),
       lists: state.lists.filter((l) => l.boardId !== id),
@@ -96,7 +104,8 @@ const useBoardStore = create((set, get) => ({
     get()._persist();
   },
 
-  /* List CRUD */
+  // ============= LIST CRUD =============
+  // Tạo list mới trong board, đặt order = số lượng list hiện tại
   createList: (boardId, name) => {
     const boardLists = get().lists.filter((l) => l.boardId === boardId);
     const list = { id: genId(), boardId, name, order: boardLists.length };
@@ -105,6 +114,7 @@ const useBoardStore = create((set, get) => ({
     return list;
   },
 
+  // Sắp xếp lại thứ tự list (dùng trong drag & drop list)
   reorderList: (listId, targetListId) => {
     const { lists } = get();
     const source = lists.find((l) => l.id === listId);
@@ -125,6 +135,7 @@ const useBoardStore = create((set, get) => ({
     get()._persist();
   },
 
+  // Cập nhật tên list
   updateList: (id, data) => {
     set((state) => ({
       lists: state.lists.map((l) => (l.id === id ? { ...l, ...data } : l)),
@@ -132,6 +143,7 @@ const useBoardStore = create((set, get) => ({
     get()._persist();
   },
 
+  // Xóa list + toàn bộ card trong list đó
   deleteList: (id) => {
     set((state) => ({
       lists: state.lists.filter((l) => l.id !== id),
@@ -140,7 +152,7 @@ const useBoardStore = create((set, get) => ({
     get()._persist();
   },
 
-  /* Card CRUD */
+  // ============= CARD CRUD =============
   createCard: (listId, title) => {
     const card = { id: genId(), listId, title, createdAt: Date.now() };
     set((state) => ({ cards: [...state.cards, card] }));
@@ -160,7 +172,7 @@ const useBoardStore = create((set, get) => ({
     get()._persist();
   },
 
-  // Di chuyển card giữa các list và tái cấu trúc lại mảng `cards`.
+  // Di chuyển card từ list này sang list khác (hoặc cùng list) tại vị trí chỉ định
   moveCard: (cardId, targetListId, targetIndex) => {
     const { cards } = get();
     const card = cards.find((c) => c.id === cardId);
@@ -178,7 +190,7 @@ const useBoardStore = create((set, get) => ({
     get()._persist();
   },
 
-  // Clear all board-related data (used on logout)
+  // Xóa toàn bộ dữ liệu board (dùng khi logout để reset store)
   clearBoardData: () => {
     nextId = 1;
     set({
@@ -191,11 +203,11 @@ const useBoardStore = create((set, get) => ({
     get()._persist();
   },
 
-  /* Card modal actions */
+  // ============= CARD MODAL =============
   openCardModal: (cardId) => set({ activeCardId: cardId }),
   closeCardModal: () => set({ activeCardId: null }),
 
-  // updateCardDetail: cập nhật card bằng cloneDeep để giữ immutability
+  // Cập nhật chi tiết card (dùng trong CardDetailModal), cloneDeep để giữ immutability
   updateCardDetail: (cardId, updatedData) => {
     const { cards } = get();
     const idx = cards.findIndex((c) => c.id === cardId);
