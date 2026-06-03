@@ -19,6 +19,7 @@ export function useAuth() {
     navigate('/login')
   }, [logout, navigate])
 
+
   return {
     user,
     isAuthenticated,
