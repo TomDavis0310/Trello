@@ -6,12 +6,18 @@ import Card from "../../../components/ui/Card";
 import ConfirmModal from "../../../components/common/ConfirmModal";
 import { z } from "zod";
 
-// === ListColumn ===
-// Component đại diện cho một cột (list) trên board.
-// Bao gồm:
-//   - useDroppable: vùng thả (drop zone) cho card & list reorder
-//   - useDraggable: kéo phần header list để sắp xếp lại thứ tự
-//   - Nút × để xóa list (có confirm)
+// ListColumn — component đại diện cho một cột (list) trên board
+// Tích hợp đồng thời:
+//   - useDroppable: đánh dấu vùng thả (drop zone) để:
+//       a) card từ list khác kéo vào
+//       b) list header kéo để reorder
+//   - useDraggable: kéo phần header list (tên cột) để sắp xếp lại thứ tự
+//   - Nút × xóa list (kèm ConfirmModal)
+//
+// Props:
+//   - list: object list { id, boardId, name, order }
+//   - children: các Card component bên trong column
+//   - onDelete: callback khi xóa list
 function ListColumn({ list, children, onDelete }) {
   const { setNodeRef: setDroppableRef, isOver } = useDroppable({
     id: `list-${list.id}`,
@@ -86,17 +92,31 @@ function ListColumn({ list, children, onDelete }) {
   );
 }
 
-// === BoardContent ===
-// Nội dung chính của board: hiển thị các cột (list) và các thẻ (card) bên trong.
-// Tích hợp đầy đủ drag & drop (dnd-kit):
-//   - Kéo card giữa các list
-//   - Kéo list để sắp xếp lại thứ tự
-//   - DragOverlay hiển thị preview khi kéo
-// Cũng cung cấp form thêm list mới và input thêm card trong từng list.
+// BoardContent — nội dung chính của một board
+// Gồm:
+//   - Các ListColumn (chứa Card bên trong) với drag & drop
+//   - Filter bar khi đang lọc theo label
+//   - Form thêm list mới
+//   - DragOverlay hiển thị preview card khi kéo
+//
+// Luồng drag & drop với @dnd-kit:
+//   1. DndContext bao bọc toàn bộ, quản lý state drag
+//   2. PointerSensor: chỉ kích hoạt drag khi chuột di chuyển >= 5px
+//   3. Khi bắt đầu kéo: onDragStart → lưu card vào activeCard (cho overlay)
+//   4. Khi thả: onDragEnd → xác định:
+//       a) Nếu active là list header → reorderList
+//       b) Nếu active là card → moveCard (xác định target list + index)
+//   5. DragOverlay: hiển thị card preview floating theo chuột
+//
+// Filter by label:
+//   - filterLabel state: lưu ID label đang lọc (null = không lọc)
+//   - cardsByList filter bỏ qua card không có label đó
+//   - Filter bar hiển thị khi filterLabel !== null, nút Clear để tắt
 export default function BoardContent({ boardId }) {
   const cards = useBoardStore((s) => s.cards);
   const allLists = useBoardStore((s) => s.lists);
-  // Lọc và sắp xếp list theo boardId + order
+
+  // Lọc list thuộc board hiện tại + sắp xếp theo order
   const lists = useMemo(
     () => allLists
       .filter((l) => l.boardId === boardId)
@@ -109,15 +129,17 @@ export default function BoardContent({ boardId }) {
 
   const [addingFor, setAddingFor] = useState(null); // listId đang mở input thêm card
   const [newTitle, setNewTitle] = useState("");
-  const [activeCard, setActiveCard] = useState(null); // card đang được kéo
+  const [activeCard, setActiveCard] = useState(null); // card đang được kéo (cho DragOverlay)
   const [listName, setListName] = useState("");
+  const [filterLabel, setFilterLabel] = useState(null); // ID label đang lọc
 
-  // Schema validate tiêu đề card (Zod)
+  // Schema Zod để validate title card khi thêm mới
   const cardSchema = z.object({
     title: z.string().min(1, "Title required").max(200),
   });
 
   // PointerSensor: yêu cầu di chuột ít nhất 5px mới bắt đầu drag
+  // Tránh vô tình kéo khi click chuột
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 5 },
@@ -136,7 +158,8 @@ export default function BoardContent({ boardId }) {
     setNewTitle("");
   };
 
-  // Xác nhận thêm card: validate Zod, nếu OK thì gọi createCard
+  // submitAdd: validate + thêm card mới
+  // Dùng safeParse để tránh throw exception
   const submitAdd = () => {
     const parsed = cardSchema.safeParse({ title: newTitle.trim() });
     if (!parsed.success) {
@@ -147,7 +170,7 @@ export default function BoardContent({ boardId }) {
     closeAdd();
   };
 
-  // Submit form thêm list mới
+  // handleAddList: submit form thêm list mới (cột cuối cùng)
   const handleAddList = (e) => {
     e.preventDefault();
     if (!listName.trim()) return;
@@ -155,35 +178,59 @@ export default function BoardContent({ boardId }) {
     setListName("");
   };
 
-  // Nhóm cards theo listId để render dễ dàng
+  // cardsByList: nhóm cards theo listId, có áp dụng bộ lọc filterLabel
+  // Dùng useMemo để tránh tính toán lại mỗi lần render
   const cardsByList = useMemo(() => {
     const map = new Map();
     lists.forEach((l) => map.set(l.id, []));
     cards.forEach((c) => {
       if (!map.has(c.listId)) return;
+      // Nếu đang lọc label → bỏ qua card không có label đó
+      if (filterLabel && !(c.labels || []).some((l) => l.id === filterLabel)) return;
       map.get(c.listId).push(c);
     });
     return map;
-  }, [lists, cards]);
+  }, [lists, cards, filterLabel]);
 
-  // === DRAG & DROP HANDLERS ===
+  // ============================================================
+  // DRAG & DROP HANDLERS
+  // ============================================================
+  // Các handler này được @dnd-kit gọi tự động trong DndContext.
+  //
+  // onDragStart: khi bắt đầu kéo (chỉ sau khi PointerSensor vượt 5px)
+  //   → lưu active card vào state để DragOverlay hiển thị preview
+  //
+  // onDragEnd: khi thả chuột (dù có đặt vào drop zone hay không)
+  //   → active: element đang được kéo
+  //   → over: element bên dưới vị trí thả
+  //   Phân loại dựa vào data gửi kèm:
+  //     - active.data.current.list !== undefined → reorder list
+  //     - active.data.current.card !== undefined → move card
+  //   Đối với move card:
+  //     - over.id = "card-{id}" → chèn vào vị trí card đó
+  //     - over.id = "list-{id}" → chèn vào cuối list
+  //
+  // onDragCancel: khi hủy kéo (ESC, click chuột phải, ...)
+  //   → reset activeCard
 
-  // Khi bắt đầu kéo: lưu card đang kéo vào state (cho DragOverlay)
+  // handleDragStart: lưu card đang kéo để DragOverlay hiển thị
   const handleDragStart = (event) => {
     setActiveCard(event.active.data.current?.card ?? null);
   };
 
-  // Khi thả: xác định loại (list reorder hay card move)
+  // handleDragEnd: xử lý khi thả — reorder list hoặc move card
   const handleDragEnd = (event) => {
     const { active, over } = event;
     setActiveCard(null);
 
     if (!active || !over) return;
 
-    // --- Reorder list ---
+    // === Reorder list ===
+    // Nếu active là list header (có data.list) → sắp xếp lại
     if (active.data.current?.list) {
       const overId = String(over.id);
       const overParts = overId.split("-");
+      // over.id có dạng "list-{id}" (drop zone của list)
       if (overParts[0] === "list") {
         const targetListId = Number(overParts[1]);
         if (!Number.isNaN(targetListId)) {
@@ -194,7 +241,7 @@ export default function BoardContent({ boardId }) {
       return;
     }
 
-    // --- Move card ---
+    // === Move card ===
     const activeCardId = active.data.current?.card?.id;
     if (!activeCardId) return;
 
@@ -203,16 +250,18 @@ export default function BoardContent({ boardId }) {
     const activeCardData = allCards.find((c) => c.id === activeCardId);
     if (!activeCardData) return;
 
+    // Parse over.id: "card-{id}" hoặc "list-{id}"
     const overId = String(over.id);
     const parts = overId.split("-");
-    const overType = parts[0];
+    const overType = parts[0];    // "card" hoặc "list"
     const overIdNum = Number(parts[1]);
     if (Number.isNaN(overIdNum)) return;
 
     const otherCards = allCards.filter((c) => c.id !== activeCardId);
 
     if (overType === "card") {
-      // Thả lên một card khác → chèn vào vị trí của card đó
+      // Thả lên một card khác → tìm vị trí card đó trong list
+      // và chèn active card ngay trước vị trí đó
       const overCard = allCards.find((c) => c.id === overIdNum);
       if (!overCard) return;
       const targetListId = overCard.listId;
@@ -221,19 +270,23 @@ export default function BoardContent({ boardId }) {
       const targetIndex = overIdx >= 0 ? overIdx : targetListCards.length;
       moveCard(activeCardId, targetListId, targetIndex);
     } else if (overType === "list") {
-      // Thả vào list → chèn vào cuối list
+      // Thả vào vùng trống của list → chèn vào cuối list
       const targetListId = overIdNum;
       const targetListCards = otherCards.filter((c) => c.listId === targetListId);
       moveCard(activeCardId, targetListId, targetListCards.length);
     }
   };
 
-  // Khi hủy kéo (thả ngoài vùng drop): reset active card
+  // handleDragCancel: reset khi kéo bị hủy giữa chừng
   const handleDragCancel = () => {
     setActiveCard(null);
   };
 
   return (
+    // DndContext: component bao bọc của @dnd-kit, quản lý toàn bộ state drag
+    // - sensors: cấu hình cảm biến (PointerSensor với 5px threshold)
+    // - onDragStart/onDragEnd/onDragCancel: lifecycle handlers
+    // Tất cả useDroppable/useDraggable bên trong đều thuộc context này
     <DndContext
       sensors={sensors}
       onDragStart={handleDragStart}
@@ -241,13 +294,28 @@ export default function BoardContent({ boardId }) {
       onDragCancel={handleDragCancel}
     >
       <div className="board-columns">
-        {/* Render từng list column */}
+        {/* Filter bar: hiển thị khi đang lọc theo label */}
+        {filterLabel && (
+          <div className="filter-bar">
+            <span>Filtering by label</span>
+            <button className="btn btn--sm btn--ghost" onClick={() => setFilterLabel(null)}>Clear</button>
+          </div>
+        )}
+
+        {/* Render từng ListColumn */}
         {lists.map((list) => (
           <ListColumn key={list.id} list={list} onDelete={deleteList}>
+            {/* Card trong list */}
             {(cardsByList.get(list.id) || []).map((card) => (
-              <Card key={card.id} card={card} />
+              <Card
+                key={card.id}
+                card={card}
+                // onLabelClick: toggle filter — click lại label đang lọc → bỏ lọc
+                onLabelClick={(labelId) => setFilterLabel(labelId === filterLabel ? null : labelId)}
+                activeLabel={filterLabel}
+              />
             ))}
-            {/* Input / button thêm card mới trong list */}
+            {/* Add card: input hoặc button, toggle theo addingFor state */}
             <div className="add-card-area">
               {addingFor === list.id ? (
                 <input
@@ -263,10 +331,7 @@ export default function BoardContent({ boardId }) {
                   placeholder="Enter card title and press Enter"
                 />
               ) : (
-                <button
-                  className="add-card-btn"
-                  onClick={() => openAdd(list.id)}
-                >
+                <button className="add-card-btn" onClick={() => openAdd(list.id)}>
                   + Add a card
                 </button>
               )}
@@ -274,7 +339,7 @@ export default function BoardContent({ boardId }) {
           </ListColumn>
         ))}
 
-        {/* Form thêm list mới (ở cuối cùng) */}
+        {/* Form thêm list mới — luôn ở cuối cùng */}
         <form className="add-list-form" onSubmit={handleAddList}>
           <input
             placeholder="+ Add list"
@@ -283,7 +348,8 @@ export default function BoardContent({ boardId }) {
           />
         </form>
 
-        {/* DragOverlay: preview card khi kéo */}
+        {/* DragOverlay: preview floating khi kéo card
+            Vị trí tự động theo chuột, không ảnh hưởng layout gốc */}
         <DragOverlay>
           {activeCard ? (
             <div className="card drag-overlay">{activeCard.title}</div>

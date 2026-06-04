@@ -43,10 +43,23 @@ const useBoardStore = create((set, get) => ({
           });
         });
 
+        // Migrate: gán giá trị mặc định cho card cũ (từ phiên bản trước)
+        // Khi thêm field mới (comments, labels, dueDate), card cũ trong localStorage
+        // sẽ không có các field này → tự động gán giá trị mặc định để tránh lỗi
+        //   - comments: mặc định []
+        //   - labels: mặc định []
+        //   - dueDate: mặc định null
+        const cards = (data.cards || []).map((c) => ({
+          ...c,
+          comments: c.comments || [],
+          labels: c.labels || [],
+          dueDate: c.dueDate || null,
+        }));
+
         set({
           boards: data.boards,
           lists,
-          cards: data.cards,
+          cards,
           isLoading: false,
         });
       } else {
@@ -153,8 +166,16 @@ const useBoardStore = create((set, get) => ({
   },
 
   // ============= CARD CRUD =============
+  // Tạo card mới trong list với đầy đủ fields:
+  //   - id: tự sinh (genId)
+  //   - listId: ID của list chứa card
+  //   - title: tiêu đề
+  //   - createdAt: timestamp
+  //   - comments: mảng comment (mỗi comment: { id, text, author, createdAt })
+  //   - labels: mảng label (mỗi label: { id, color, text })
+  //   - dueDate: string ISO date hoặc null
   createCard: (listId, title) => {
-    const card = { id: genId(), listId, title, createdAt: Date.now() };
+    const card = { id: genId(), listId, title, createdAt: Date.now(), comments: [], labels: [], dueDate: null };
     set((state) => ({ cards: [...state.cards, card] }));
     get()._persist();
     return card;
@@ -187,6 +208,78 @@ const useBoardStore = create((set, get) => ({
       ...targetCards,
     ];
     set({ cards: finalCards });
+    get()._persist();
+  },
+
+  // ============= COMMENT CRUD =============
+  addComment: (cardId, text, author) => {
+    const comment = {
+      id: genId(),
+      text,
+      author,
+      createdAt: Date.now(),
+    };
+    set((state) => ({
+      cards: state.cards.map((c) =>
+        c.id === cardId
+          ? { ...c, comments: [...(c.comments || []), comment] }
+          : c,
+      ),
+    }));
+    get()._persist();
+    return comment;
+  },
+
+  deleteComment: (cardId, commentId) => {
+    set((state) => ({
+      cards: state.cards.map((c) =>
+        c.id === cardId
+          ? { ...c, comments: (c.comments || []).filter((cm) => cm.id !== commentId) }
+          : c,
+      ),
+    }));
+    get()._persist();
+  },
+
+  // ============= LABEL CRUD =============
+  // Label là nhãn màu gắn vào card, mỗi label có:
+  //   - id: tự sinh
+  //   - color: mã hex (vd: "#61bd4f")
+  //   - text: tên hiển thị (vd: "Urgent")
+  //
+  // addLabel: thêm label vào card (gán id tự động)
+  // removeLabel: xóa label khỏi card theo labelId
+  addLabel: (cardId, label) => {
+    set((state) => ({
+      cards: state.cards.map((c) =>
+        c.id === cardId
+          ? { ...c, labels: [...(c.labels || []), { id: genId(), ...label }] }
+          : c,
+      ),
+    }));
+    get()._persist();
+  },
+
+  removeLabel: (cardId, labelId) => {
+    set((state) => ({
+      cards: state.cards.map((c) =>
+        c.id === cardId
+          ? { ...c, labels: (c.labels || []).filter((l) => l.id !== labelId) }
+          : c,
+      ),
+    }));
+    get()._persist();
+  },
+
+  // ============= DUE DATE =============
+  // setDueDate: đặt hoặc xóa ngày hết hạn của card
+  //   - dateString: chuỗi ISO date (vd: "2026-06-10") hoặc null để xóa
+  setDueDate: (cardId, dateString) => {
+    set((state) => ({
+      cards: state.cards.map((c) =>
+        c.id === cardId ? { ...c, dueDate: dateString } : c,
+      ),
+    }));
     get()._persist();
   },
 

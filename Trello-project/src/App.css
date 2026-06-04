@@ -275,6 +275,68 @@
   cursor: grabbing;
 }
 
+/* Card labels — hiển thị dạng chấm màu nằm ngang trên card
+   Mỗi chấm là một label, màu sắc tương ứng với màu label
+   .active: outline khi label đang được dùng để lọc */
+.card-labels {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+
+.card-label-dot {
+  width: 32px;
+  height: 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.card-label-dot:hover {
+  opacity: 0.8;
+}
+
+.card-label-dot.active {
+  outline: 2px solid var(--text-h);
+  outline-offset: 1px;
+}
+
+/* Due date badge on card — hiển thị compact trên footer card
+   .due-date-badge--sm: kích thước nhỏ cho card
+   .due-date--overdue / today / tomorrow / upcoming: màu sắc theo trạng thái */
+.due-date-badge--sm {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-weight: 500;
+}
+
+/* Trạng thái due date:
+   - overdue (đỏ): đã quá hạn
+   - today (cam): đến hạn hôm nay
+   - tomorrow (vàng): đến hạn ngày mai
+   - upcoming (xanh lá): còn nhiều ngày */
+.due-date--overdue {
+  background: #eb5a46;
+  color: #fff;
+}
+
+.due-date--today {
+  background: #ff9f1a;
+  color: #fff;
+}
+
+.due-date--tomorrow {
+  background: #f2d600;
+  color: #172b4d;
+}
+
+.due-date--upcoming {
+  background: #61bd4f;
+  color: #fff;
+}
+
 /* Auth pages */
 .auth-page {
   display: flex;
@@ -496,9 +558,26 @@
   box-sizing: border-box;
 }
 
-/* Card delete button */
+/* Card footer — chứa due date badge + comment count
+   .card-footer: flex container nằm dưới title
+   .card-comment-count: icon chat + số lượng comment */
 .card {
   position: relative;
+}
+
+.card-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.card-comment-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 12px;
+  color: var(--text);
 }
 
 .card-delete-btn {
@@ -614,6 +693,206 @@
   font-size: 14px;
   color: #e53e3e;
   margin-top: 8px;
+}
+
+/* Labels in card detail modal
+   .card-label-tag: label dạng tag màu (nền = màu label, chữ trắng, có nút ×)
+   .label-picker: popup chọn màu + nhập text tùy chọn
+   .label-color-swatch: ô vuông nhỏ để chọn màu */
+.card-detail-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.card-label-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #fff;
+}
+
+.card-label-remove {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0;
+  line-height: 1;
+}
+
+.card-label-remove:hover {
+  color: #fff;
+}
+
+.label-picker {
+  margin-top: 8px;
+  padding: 10px;
+  background: var(--code-bg);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.label-picker-colors {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.label-color-swatch {
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.label-color-swatch:hover {
+  border-color: var(--text-h);
+}
+
+.label-picker-input {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 13px;
+  background: var(--bg);
+  color: var(--text-h);
+  box-sizing: border-box;
+}
+
+/* Due date in card detail modal
+   .card-detail-due: chế độ xem (badge + nút Change/Remove)
+   .card-detail-due-edit: chế độ edit (date input + Cancel/Save)
+   .due-date-badge: badge lớn trong modal */
+.card-detail-due {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.card-detail-due-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.due-date-input {
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 14px;
+  background: var(--bg);
+  color: var(--text-h);
+}
+
+.due-date-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* Filter bar — hiển thị khi đang lọc card theo label
+   Nằm trên cùng của board-columns, có nút Clear để tắt lọc */
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--accent-bg);
+  border: 1px solid var(--accent-border);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text-h);
+  margin-bottom: 8px;
+  flex-shrink: 0;
+  align-self: flex-start;
+}
+
+/* Comments in card detail */
+.card-detail-comments {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.comment-item {
+  background: var(--code-bg);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+.comment-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.comment-author {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.comment-date {
+  font-size: 11px;
+  color: var(--text);
+}
+
+.comment-delete-btn {
+  margin-left: auto;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text);
+  padding: 0 4px;
+  border-radius: 3px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.comment-item:hover .comment-delete-btn {
+  opacity: 1;
+}
+
+.comment-delete-btn:hover {
+  background: var(--border);
+  color: var(--text-h);
+}
+
+.comment-text {
+  font-size: 14px;
+  color: var(--text-h);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.comment-input-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.comment-input {
+  min-height: 60px;
 }
 
 /* Confirm modal */
