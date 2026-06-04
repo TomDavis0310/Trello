@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import Button from './Button'
+import { Button } from './Button'
 
 // === Modal (UI) ===
 // Component modal chung, dùng createPortal để render vào document.body.

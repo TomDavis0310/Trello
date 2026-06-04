@@ -25,7 +25,7 @@ function ProtectedRoute({ children }) {
 export default function AppRoutes() {
   return (
     <Routes>
-      {/* Dashboard: protected */}
+      {/* Dashboard: protected */} 
       <Route
         path="/"
         element={

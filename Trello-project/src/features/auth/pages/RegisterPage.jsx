@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import Button from '../../../components/ui/Button'
+import { Button } from '../../../components/ui/Button'
 import useAuthStore from '../../../store/authStore'
 
 // === Trang Đăng ký ===

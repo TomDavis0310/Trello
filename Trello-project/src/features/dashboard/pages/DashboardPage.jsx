@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import BoardList from '../components/BoardList'
-import Button from '../../../components/ui/Button'
+import { Button } from '../../../components/ui/Button'
 import Modal from '../../../components/ui/Modal'
 import useBoardStore from '../../../store/boardStore'
 

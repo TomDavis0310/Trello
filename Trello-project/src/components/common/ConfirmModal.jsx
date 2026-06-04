@@ -1,5 +1,5 @@
 import Modal from "../ui/Modal";
-import Button from "../ui/Button";
+import { Button } from "../ui/Button";
 
 // === ConfirmModal (Common) ===
 // Modal xác nhận dùng cho các hành động nguy hiểm (xóa board, list, card).
@@ -28,7 +28,7 @@ export default function ConfirmModal({
         <Button variant="ghost" onClick={onCancel} aria-label="Cancel">
           Cancel
         </Button>
-        <Button variant="danger" onClick={onConfirm} aria-label="Delete">
+        <Button variant="destructive" onClick={onConfirm} aria-label="Delete">
           Delete
         </Button>
       </div>

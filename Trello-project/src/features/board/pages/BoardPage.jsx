@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import BoardContent from "../components/BoardContent";
-import Button from "../../../components/ui/Button";
+import { Button } from "../../../components/ui/Button";
 import useBoardStore from "../../../store/boardStore";
 
 // === Board Page ===

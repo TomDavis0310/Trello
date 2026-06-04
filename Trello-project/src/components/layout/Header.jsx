@@ -1,5 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
-import Button from "../ui/Button";
+import { Button } from "../ui/Button";
+import { Switch } from "../ui/switch";
 import useAuthStore from "../../store/authStore";
 import useUiStore from "../../store/uiStore";
 
@@ -12,6 +13,8 @@ import useUiStore from "../../store/uiStore";
 export default function Header() {
   const { user, logout } = useAuthStore();
   const toggleSidebar = useUiStore((s) => s.toggleSidebar);
+  const theme = useUiStore((s) => s.theme);
+  const toggleTheme = useUiStore((s) => s.toggleTheme);
   const navigate = useNavigate();
 
   return (
@@ -26,6 +29,8 @@ export default function Header() {
         </Link>
       </div>
       <div className="header-right">
+        {/* Switch chuyển dark/light mode */}
+        <Switch checked={theme === 'dark'} onCheckedChange={toggleTheme} aria-label="Toggle dark mode" />
         {user ? (
           <>
             {/* User đã đăng nhập */}
