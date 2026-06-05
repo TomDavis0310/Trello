@@ -1,24 +1,29 @@
-import { useState } from 'react'
-import BoardList from '../components/BoardList'
-import { Button } from '../../../components/ui/Button'
-import Modal from '../../../components/ui/Modal'
-import useBoardStore from '../../../store/boardStore'
+import { useState } from "react";
+import BoardList from "../components/BoardList";
+import { Button } from "../../../components/ui/Button";
+import { Input } from "../../../components/ui/Input";
+import Modal from "../../../components/ui/Modal";
+import useBoardStore from "../../../store/boardStore";
 
 // === Dashboard Page ===
 // Trang tổng quan hiển thị danh sách các Board.
 // Cho phép tạo board mới qua modal nhập tên.
 export default function DashboardPage() {
-  const [showModal, setShowModal] = useState(false)
-  const [boardName, setBoardName] = useState('')
-  const createBoard = useBoardStore((s) => s.createBoard)
+  const [showModal, setShowModal] = useState(false);
+  const [boardName, setBoardName] = useState("");
+  const createBoard = useBoardStore((s) => s.createBoard);
 
   const handleCreate = (e) => {
-    e.preventDefault()
-    if (!boardName.trim()) return
-    createBoard(boardName.trim())
-    setBoardName('')
-    setShowModal(false)
-  }
+    e.preventDefault();
+
+    const name = boardName.trim();
+
+    if (!name) return;
+
+    createBoard(name);
+    setBoardName("");
+    setShowModal(false);
+  };
 
   return (
     <div className="dashboard-page">
@@ -29,9 +34,13 @@ export default function DashboardPage() {
       {/* Danh sách các board */}
       <BoardList />
       {/* Modal tạo board mới */}
-      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="Create Board">
+      <Modal
+        isOpen={showModal}
+        onClose={() => setShowModal(false)}
+        title="Create Board"
+      >
         <form className="crud-form" onSubmit={handleCreate}>
-          <input
+          <Input
             autoFocus
             placeholder="Board name"
             value={boardName}
@@ -39,11 +48,13 @@ export default function DashboardPage() {
             required
           />
           <div className="crud-actions">
-            <Button variant="ghost" onClick={() => setShowModal(false)}>Cancel</Button>
+            <Button variant="ghost" onClick={() => setShowModal(false)}>
+              Cancel
+            </Button>
             <Button type="submit">Create</Button>
           </div>
         </form>
       </Modal>
     </div>
-  )
+  );
 }

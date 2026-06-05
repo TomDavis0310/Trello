@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Button } from '../../../components/ui/Button'
+import { Input } from '../../../components/ui/Input'
 import useAuthStore from '../../../store/authStore'
 
 // === Trang Đăng ký ===
@@ -32,14 +33,14 @@ export default function RegisterPage() {
       <form className="auth-form" onSubmit={handleSubmit}>
         <h1>Register</h1>
         {error && <p className="error">{error}</p>}
-        <input
+        <Input
           type="email"
           placeholder="Email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
         />
-        <input
+        <Input
           type="password"
           placeholder="Password"
           value={password}

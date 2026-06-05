@@ -1,7 +1,8 @@
 import { useState } from "react";
-import Modal from "../ui/Modal";
-import useBoardStore from "../../store/boardStore";
-import useAuthStore from "../../store/authStore";
+import Modal from "../../../components/ui/Modal";
+import { Input } from "../../../components/ui/Input";
+import useBoardStore from "../../../store/boardStore";
+import useAuthStore from "../../../store/authStore";
 import { z } from "zod";
 
 // LABEL_COLORS — bảng màu có sẵn cho label, lấy cảm hứng từ Trello
@@ -176,7 +177,7 @@ function CardDetailBody({ card, column, onClose }) {
             </div>
             {/* Input text tùy chọn cho label, Enter → thêm với màu đầu tiên */}
             <div className="label-picker-custom">
-              <input className="label-picker-input" placeholder="Label text (optional)" value={labelText}
+              <Input className="label-picker-input" placeholder="Label text (optional)" value={labelText}
                 onChange={(e) => setLabelText(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") handleAddLabel(LABEL_COLORS[0].color); }} />
             </div>
@@ -209,7 +210,7 @@ function CardDetailBody({ card, column, onClose }) {
           </div>
         ) : (
           <div className="card-detail-due-edit">
-            <input type="date" className="due-date-input" value={dueDateDraft}
+            <Input type="date" className="due-date-input" value={dueDateDraft}
               onChange={(e) => setDueDateDraft(e.target.value)} />
             <div className="card-detail-edit-actions">
               <button className="btn btn--sm" onClick={() => setEditingDueDate(false)}>Cancel</button>
@@ -281,7 +282,7 @@ function CardDetailBody({ card, column, onClose }) {
   );
 }
 
-// CardDetailModal — component được render trong Layout.jsx
+// CardDetailModal — component modal chi tiết card, render trong BoardPage
 // Hoạt động như một global modal: tự động hiện/khi ẩn dựa trên activeCardId
 // - activeCardId !== null → có card đang được chọn → mở modal
 // - activeCardId === null → ẩn modal

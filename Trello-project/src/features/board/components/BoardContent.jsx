@@ -3,6 +3,7 @@ import { DndContext, DragOverlay, useDroppable, useDraggable } from "@dnd-kit/co
 import { useSensors, useSensor, PointerSensor } from "@dnd-kit/core";
 import useBoardStore from "../../../store/boardStore";
 import Card from "../../../components/ui/Card";
+import { Input } from "../../../components/ui/Input";
 import ConfirmModal from "../../../components/common/ConfirmModal";
 import { z } from "zod";
 
@@ -318,7 +319,7 @@ export default function BoardContent({ boardId }) {
             {/* Add card: input hoặc button, toggle theo addingFor state */}
             <div className="add-card-area">
               {addingFor === list.id ? (
-                <input
+                <Input
                   autoFocus
                   className="add-card-input"
                   value={newTitle}
@@ -341,7 +342,7 @@ export default function BoardContent({ boardId }) {
 
         {/* Form thêm list mới — luôn ở cuối cùng */}
         <form className="add-list-form" onSubmit={handleAddList}>
-          <input
+          <Input
             placeholder="+ Add list"
             value={listName}
             onChange={(e) => setListName(e.target.value)}

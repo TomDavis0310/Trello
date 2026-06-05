@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import BoardContent from "../components/BoardContent";
 import { Button } from "../../../components/ui/Button";
+import { Input } from "../../../components/ui/Input";
+import CardDetailModal from "./CardDetailModal";
 import useBoardStore from "../../../store/boardStore";
 
 // === Board Page ===
@@ -47,7 +49,7 @@ export default function BoardPage() {
         <div className="board-header-row">
           {/* Inline edit title: click vào h1 để chuyển sang input */}
           {editingName ? (
-            <input
+            <Input
               autoFocus
               className="board-title-input"
               value={editTitle}
@@ -78,6 +80,7 @@ export default function BoardPage() {
       </header>
       {/* Nội dung board: các list + drag & drop */}
       <BoardContent boardId={boardId} />
+      <CardDetailModal />
     </div>
   );
 }

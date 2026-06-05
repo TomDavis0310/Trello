@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import useBoardStore from "../../store/boardStore";
 import ConfirmModal from "../common/ConfirmModal";
+import { Input } from "./Input";
 
 // Card — component hiển thị một thẻ công việc trong column
 // Nhận các props:
@@ -100,7 +101,7 @@ export default function Card({ card, onLabelClick, activeLabel }) {
   if (editing) {
     return (
       <div className="card card--editing">
-        <input
+        <Input
           autoFocus
           value={title}
           onChange={(e) => setTitle(e.target.value)}
