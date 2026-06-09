@@ -16,9 +16,11 @@ import { Input } from "./Input";
 //   - Click vào title → inline edit nhanh tiêu đề
 //   - Hiển thị label dạng chấm màu, due date badge, comment count
 export default function Card({ card, onLabelClick, activeLabel }) {
-  const [editing, setEditing] = useState(false);      // đang inline edit title?
-  const [title, setTitle] = useState(card.title);       // draft cho inline edit
+  const [editing, setEditing] = useState(false);
+  const [title, setTitle] = useState(card.title);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+
+  const titleError = title.length > 50 ? 'Tiêu đề không được quá 50 ký tự' : null
 
   // Lấy các actions từ boardStore
   const updateCard = useBoardStore((s) => s.updateCard);
@@ -65,10 +67,8 @@ export default function Card({ card, onLabelClick, activeLabel }) {
     ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
     : undefined;
 
-  // handleSave: lưu title sau inline edit
-  //   - Nếu có thay đổi → gọi updateCard()
-  //   - Nếu không thay đổi → reset về giá trị cũ
   const handleSave = () => {
+    if (titleError) return;
     if (title.trim() && title.trim() !== card.title) {
       updateCard(card.id, { title: title.trim() });
     } else {
@@ -102,11 +102,13 @@ export default function Card({ card, onLabelClick, activeLabel }) {
     return (
       <div className="card card--editing">
         <Input
+          size="sm"
           autoFocus
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          onBlur={handleSave}          // blur → tự động lưu
+          onBlur={handleSave}
           onKeyDown={handleKeyDown}
+          error={titleError}
         />
       </div>
     );
@@ -117,7 +119,7 @@ export default function Card({ card, onLabelClick, activeLabel }) {
       {/* Card element chính */}
       <div
         ref={setNodeRef}
-        className={`card${isDragging ? " dragging" : ""}`}
+        className={`card break-words${isDragging ? " dragging" : ""}`}
         style={style}
         {...listeners}
         {...attributes}
@@ -142,7 +144,7 @@ export default function Card({ card, onLabelClick, activeLabel }) {
         )}
 
         {/* Title: click để inline edit (stopPropagation tránh mở modal) */}
-        <p
+        <p className="break-words"
           onClick={(e) => {
             e.stopPropagation();
             setTitle(card.title);

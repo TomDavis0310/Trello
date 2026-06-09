@@ -33,14 +33,14 @@ export default function LoginPage() {
       <form className="auth-form" onSubmit={handleSubmit}>
         <h1>Log in</h1>
         {error && <p className="error">{error}</p>}
-        <Input
+        <Input size="lg"
           type="email"
           placeholder="Email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
         />
-        <Input
+        <Input size="lg"
           type="password"
           placeholder="Password"
           value={password}

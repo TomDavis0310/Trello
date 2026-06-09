@@ -20,7 +20,7 @@ const useAuthStore = create((set) => ({
   login: async (email, password) => {
     set({ isLoading: true, error: null });
     try {
-      const user = await api.login(email, password);
+      const user = api.login(email, password);
       set({ user, isAuthenticated: true, isLoading: false });
     } catch (err) {
       set({ error: err.message, isLoading: false });

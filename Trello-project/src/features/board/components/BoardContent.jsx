@@ -132,6 +132,8 @@ export default function BoardContent({ boardId }) {
   const [newTitle, setNewTitle] = useState("");
   const [activeCard, setActiveCard] = useState(null); // card đang được kéo (cho DragOverlay)
   const [listName, setListName] = useState("");
+  const cardError = newTitle.length > 50 ? 'Tiêu đề card không được quá 50 ký tự' : null
+  const listError = listName.length > 50 ? 'Tên list không được quá 50 ký tự' : null
   const [filterLabel, setFilterLabel] = useState(null); // ID label đang lọc
 
   // Schema Zod để validate title card khi thêm mới
@@ -159,9 +161,8 @@ export default function BoardContent({ boardId }) {
     setNewTitle("");
   };
 
-  // submitAdd: validate + thêm card mới
-  // Dùng safeParse để tránh throw exception
   const submitAdd = () => {
+    if (cardError) return;
     const parsed = cardSchema.safeParse({ title: newTitle.trim() });
     if (!parsed.success) {
       alert(parsed.error.errors.map((e) => e.message).join("\n"));
@@ -171,9 +172,9 @@ export default function BoardContent({ boardId }) {
     closeAdd();
   };
 
-  // handleAddList: submit form thêm list mới (cột cuối cùng)
   const handleAddList = (e) => {
     e.preventDefault();
+    if (listError) return;
     if (!listName.trim()) return;
     createList(boardId, listName.trim());
     setListName("");
@@ -319,12 +320,13 @@ export default function BoardContent({ boardId }) {
             {/* Add card: input hoặc button, toggle theo addingFor state */}
             <div className="add-card-area">
               {addingFor === list.id ? (
-                <Input
+                <Input size="sm"
                   autoFocus
                   className="add-card-input"
                   value={newTitle}
                   onChange={(e) => setNewTitle(e.target.value)}
                   onBlur={closeAdd}
+                  error={cardError}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") submitAdd();
                     if (e.key === "Escape") closeAdd();
@@ -342,10 +344,11 @@ export default function BoardContent({ boardId }) {
 
         {/* Form thêm list mới — luôn ở cuối cùng */}
         <form className="add-list-form" onSubmit={handleAddList}>
-          <Input
+          <Input size="sm"
             placeholder="+ Add list"
             value={listName}
             onChange={(e) => setListName(e.target.value)}
+            error={listError}
           />
         </form>
 

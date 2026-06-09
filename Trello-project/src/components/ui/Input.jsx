@@ -1,10 +1,11 @@
-import { Input as InputPrimitive } from "@base-ui/react/input"
+import { useId } from "react";
+import { Input as InputPrimitive } from "@base-ui/react/input";
 import { cva } from "class-variance-authority";
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/utils";
 
 const inputVariants = cva(
-  "flex h-8 w-full rounded-lg border border-input bg-background px-2.5 py-1.5 text-sm text-foreground shadow-none transition-all file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40",
+  "flex h-8 w-full rounded-lg border border-input bg-background px-2.5 py-1.5 text-sm text-foreground shadow-none transition-all file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
   {
     variants: {
       size: {
@@ -16,21 +17,31 @@ const inputVariants = cva(
     defaultVariants: {
       size: "default",
     },
-  }
-)
+  },
+);
 
-function Input({
-  className,
-  size,
-  ...props
-}) {
+function Input({ className, size, error, ...props }) {
+  const errorId = useId();
+
   return (
-    <InputPrimitive
-      data-slot="input"
-      className={cn(inputVariants({ size, className }))}
-      {...props} />
+    <div className="flex flex-col gap-1.5">
+      <InputPrimitive
+        data-slot="input"
+        className={cn(
+          inputVariants({ size, className }),
+          error && "border-red-600 ring-2 ring-red-500/40 focus-visible:border-red-600 focus-visible:ring-red-500/60",
+        )}
+        aria-describedby={error ? errorId : undefined}
+        {...props}
+      />
+      {error && (
+        <p id={errorId} className="text-xs text-red-600 font-medium">
+          {error}
+        </p>
+      )}
+    </div>
   );
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
-export { Input, inputVariants }
+export { Input, inputVariants };

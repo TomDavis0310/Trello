@@ -177,7 +177,7 @@ function CardDetailBody({ card, column, onClose }) {
             </div>
             {/* Input text tùy chọn cho label, Enter → thêm với màu đầu tiên */}
             <div className="label-picker-custom">
-              <Input className="label-picker-input" placeholder="Label text (optional)" value={labelText}
+              <Input size="sm" className="label-picker-input" placeholder="Label text (optional)" value={labelText}
                 onChange={(e) => setLabelText(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") handleAddLabel(LABEL_COLORS[0].color); }} />
             </div>
@@ -210,7 +210,7 @@ function CardDetailBody({ card, column, onClose }) {
           </div>
         ) : (
           <div className="card-detail-due-edit">
-            <Input type="date" className="due-date-input" value={dueDateDraft}
+            <Input size="sm" type="date" className="due-date-input" value={dueDateDraft}
               onChange={(e) => setDueDateDraft(e.target.value)} />
             <div className="card-detail-edit-actions">
               <button className="btn btn--sm" onClick={() => setEditingDueDate(false)}>Cancel</button>

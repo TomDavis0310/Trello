@@ -10,6 +10,7 @@ import useAuthStore from '../../../store/authStore'
 export default function RegisterPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const emailError = email.length > 50 ? 'Email không được quá 50 ký tự' : null
   const navigate = useNavigate()
   const { register, isLoading, error, isAuthenticated, clearError } = useAuthStore()
 
@@ -33,14 +34,15 @@ export default function RegisterPage() {
       <form className="auth-form" onSubmit={handleSubmit}>
         <h1>Register</h1>
         {error && <p className="error">{error}</p>}
-        <Input
+        <Input size="lg"
           type="email"
           placeholder="Email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
+          error={emailError}
           required
         />
-        <Input
+        <Input size="lg"
           type="password"
           placeholder="Password"
           value={password}

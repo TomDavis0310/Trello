@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import BoardContent from "../components/BoardContent";
 import { Button } from "../../../components/ui/Button";
 import { Input } from "../../../components/ui/Input";
-import CardDetailModal from "./CardDetailModal";
+import CardDetailModal from "../components/CardDetailModal";
 import useBoardStore from "../../../store/boardStore";
 
 // === Board Page ===
@@ -21,9 +21,10 @@ export default function BoardPage() {
 
   const [editingName, setEditingName] = useState(false);
   const [editTitle, setEditTitle] = useState("");
+  const titleError = editTitle.length > 50 ? 'Tiêu đề không được quá 50 ký tự' : null
 
-  // Khi người dùng rename board: nếu title khác và không rỗng thì update
   const handleRename = () => {
+    if (titleError) return;
     if (editTitle.trim() && editTitle !== board?.name) {
       updateBoard(boardId, { name: editTitle.trim() });
     }
@@ -49,12 +50,13 @@ export default function BoardPage() {
         <div className="board-header-row">
           {/* Inline edit title: click vào h1 để chuyển sang input */}
           {editingName ? (
-            <Input
+            <Input size="lg"
               autoFocus
               className="board-title-input"
               value={editTitle}
               onChange={(e) => setEditTitle(e.target.value)}
               onBlur={handleRename}
+              error={titleError}
               onKeyDown={(e) => {
                 if (e.key === "Enter") handleRename();
                 if (e.key === "Escape") {

@@ -29,6 +29,7 @@ function AppInit() {
   useEffect(() => {
     fetchBoards();
   }, [fetchBoards]);
+
   return null;
 }
 
@@ -40,6 +41,89 @@ function AppInit() {
 // 4. `Layout`     – bố cục chính: Header, Sidebar (nếu auth), Main content.
 // 5. `AppRoutes`  – định tuyến đến các feature pages (Dashboard, Board, Auth).
 export default function App() {
+  //   const wrapper = useCallback(async () => {
+  //     const postPromise = new Promise((resolve, reject) => {
+  //       setTimeout(() => {
+  //         resolve({ id: 1, title: "Post 1", userId: 1 });
+  //       }, 5000);
+  //     });
+  //     const userPromise = new Promise((resolve, reject) => {
+  //       setTimeout(() => {
+  //         resolve({ id: 1, name: "User 1", addressId: "01" });
+  //       }, 10000);
+  //     });
+  //     const addressPromise = new Promise((resolve, reject) => {
+  //       setTimeout(() => {
+  //         resolve({ id: "01", street: "123 Main St", city: "Hanoi" });
+  //       }, 15000);
+  //     });
+
+  //     console.time("fetching");
+  //     const post = await postPromise;
+  //     const user = await userPromise;
+  //     const address = await addressPromise;
+  //     // const results = await Promise.all([
+  //     //   postPromise,
+  //     //   userPromise,
+  //     //   addressPromise,
+  //     // ]);
+  //     // const [post, user, address] = results;
+  //     console.timeEnd("fetching");
+
+  //     // console.timeEnd("fetching");
+
+  //     console.log({
+  //       post,
+  //       user,
+  //       address,
+  //     });
+
+  //     const a = (post, user) => {
+  //       return `message: ${post.title} - ${user.name}`;
+  //     };
+
+  //     console.log(a(post, user));
+
+  //     //  const {} = await post
+  //     //     .then((post) => {
+  //     //       console.log("Post:", post);
+
+  //     //       return user.then((user) => {
+  //     //         console.log("User:", user);
+
+  //     //         return address.then((address) => {
+  //     //           console.log("Address:", address);
+
+  //     //           return {
+  //     //             post,
+  //     //             user,
+  //     //             address,
+  //     //           };
+  //     //         });
+  //     //       });
+  //     //     }).then((result) => {
+  //     //       console.log("Result:", result);
+  //     //     })
+  //     //     .catch((error) => {
+  //     //       console.error("Error fetching post:", error);
+  //     //     });
+
+  //     // try {
+  //     //   console.log(a);
+  //     //   const b = await a;
+  //     //   console.log(a);
+  //     //   console.log(b);
+  //     // } catch (error) {
+  //     //   console.log(a);
+
+  //     //   console.log(error);
+  //     // }
+  //   }, []);
+
+  //   useEffect(() => {
+  //     wrapper();
+  //   }, [wrapper]);
+
   return (
     <BrowserRouter>
       <ThemeInit />
