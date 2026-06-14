@@ -331,20 +331,18 @@ const useBoardStore = create(
       // removeLabel: xóa label khỏi card theo labelId
       addLabel: (cardId, label) => {
         set(
-          (state) => (
-            {
-              cards: state.cards.map((c) =>
-                c.id === cardId
-                  ? {
-                      ...c,
-                      labels: [...(c.labels || []), { id: genId(), ...label }],
-                    }
-                  : c,
-              ),
-            },
-            false,
-            "addLabel"
-          ),
+          (state) => ({
+            cards: state.cards.map((c) =>
+              c.id === cardId
+                ? {
+                    ...c,
+                    labels: [...(c.labels || []), { id: genId(), ...label }],
+                  }
+                : c,
+            ),
+          }),
+          false,
+          "addLabel"
         );
         get()._persist();
       },
@@ -368,15 +366,13 @@ const useBoardStore = create(
       //   - dateString: chuỗi ISO date (vd: "2026-06-10") hoặc null để xóa
       setDueDate: (cardId, dateString) => {
         set(
-          (state) => (
-            {
-              cards: state.cards.map((c) =>
-                c.id === cardId ? { ...c, dueDate: dateString } : c,
-              ),
-            },
-            false,
-            "setDueDate"
-          ),
+          (state) => ({
+            cards: state.cards.map((c) =>
+              c.id === cardId ? { ...c, dueDate: dateString } : c,
+            ),
+          }),
+          false,
+          "setDueDate"
         );
         get()._persist();
       },

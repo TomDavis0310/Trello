@@ -1,62 +1,63 @@
-import { useMemo, useState } from "react";
-import { DndContext, DragOverlay, useDroppable, useDraggable } from "@dnd-kit/core";
+import { useMemo, useState, useRef, useCallback, useEffect } from "react";
+
+const EMPTY_ITEMS = [];
+import { DndContext, DragOverlay } from "@dnd-kit/core";
 import { useSensors, useSensor, PointerSensor } from "@dnd-kit/core";
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  horizontalListSortingStrategy,
+  arrayMove,
+  useSortable,
+} from "@dnd-kit/sortable";
 import useBoardStore from "../../../store/boardStore";
 import Card from "../../../components/ui/Card";
 import { Input } from "../../../components/ui/Input";
 import ConfirmModal from "../../../components/common/ConfirmModal";
 import { z } from "zod";
 
-// ListColumn — component đại diện cho một cột (list) trên board
-// Tích hợp đồng thời:
-//   - useDroppable: đánh dấu vùng thả (drop zone) để:
-//       a) card từ list khác kéo vào
-//       b) list header kéo để reorder
-//   - useDraggable: kéo phần header list (tên cột) để sắp xếp lại thứ tự
-//   - Nút × xóa list (kèm ConfirmModal)
-//
-// Props:
-//   - list: object list { id, boardId, name, order }
-//   - children: các Card component bên trong column
-//   - onDelete: callback khi xóa list
 function ListColumn({ list, children, onDelete }) {
-  const { setNodeRef: setDroppableRef, isOver } = useDroppable({
-    id: `list-${list.id}`,
-    data: { list },
-  });
-
   const {
     attributes,
     listeners,
-    setNodeRef: setDraggableRef,
+    setNodeRef,
     transform,
+    transition,
     isDragging,
-  } = useDraggable({
-    id: `list-header-${list.id}`,
-    data: { list },
+  } = useSortable({
+    id: `list-${list.id}`,
+    data: { type: 'list', list },
+    handle: true,
   });
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  const dragStyle = transform
-    ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
-    : undefined;
+  const style = {
+    transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
+    transition,
+  };
 
   return (
     <div
-      ref={setDroppableRef}
-      className={`board-column-wrapper${isOver ? " board-column--drag-over" : ""}${isDragging ? " board-column--dragging" : ""}`}
+      ref={setNodeRef}
+      className={`board-column-wrapper${isDragging ? " board-column--dragging" : ""}`}
+      style={style}
     >
       <div className="board-column">
-        {/* Header có thể kéo */}
-        <div
-          ref={setDraggableRef}
-          className="column-header"
-          style={dragStyle}
-          {...listeners}
-          {...attributes}
-        >
-          <h3>{list.name}</h3>
+        <div className="column-header group" style={{ justifyContent: 'normal' }}>
+          <button
+            className="list-drag-handle invisible group-hover:visible group-focus-within:visible flex items-center justify-center w-6 h-6 rounded cursor-grab shrink-0"
+            {...listeners}
+            {...attributes}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+              <circle cx="8" cy="3" r="1.5"/>
+              <circle cx="8" cy="8" r="1.5"/>
+              <circle cx="8" cy="13" r="1.5"/>
+            </svg>
+          </button>
+          <h3 className="flex-1 min-w-0">{list.name}</h3>
           <button
             className="list-delete-btn"
             title="Delete list"
@@ -68,7 +69,6 @@ function ListColumn({ list, children, onDelete }) {
             &times;
           </button>
         </div>
-        {/* Các card trong list */}
         <div className="column-cards">
           {children}
         </div>
@@ -93,31 +93,40 @@ function ListColumn({ list, children, onDelete }) {
   );
 }
 
-// BoardContent — nội dung chính của một board
-// Gồm:
-//   - Các ListColumn (chứa Card bên trong) với drag & drop
-//   - Filter bar khi đang lọc theo label
-//   - Form thêm list mới
-//   - DragOverlay hiển thị preview card khi kéo
-//
-// Luồng drag & drop với @dnd-kit:
-//   1. DndContext bao bọc toàn bộ, quản lý state drag
-//   2. PointerSensor: chỉ kích hoạt drag khi chuột di chuyển >= 5px
-//   3. Khi bắt đầu kéo: onDragStart → lưu card vào activeCard (cho overlay)
-//   4. Khi thả: onDragEnd → xác định:
-//       a) Nếu active là list header → reorderList
-//       b) Nếu active là card → moveCard (xác định target list + index)
-//   5. DragOverlay: hiển thị card preview floating theo chuột
-//
-// Filter by label:
-//   - filterLabel state: lưu ID label đang lọc (null = không lọc)
-//   - cardsByList filter bỏ qua card không có label đó
-//   - Filter bar hiển thị khi filterLabel !== null, nút Clear để tắt
+function buildCardMap(cards) {
+  const map = {};
+  cards.forEach((c) => { map['card-' + c.id] = c; });
+  return map;
+}
+
+function buildCardItems(lists, cardsByList) {
+  const map = {};
+  lists.forEach((l) => {
+    map['list-' + l.id] = (cardsByList.get(l.id) || []).map((c) => 'card-' + c.id);
+  });
+  return map;
+}
+
+function buildListOrder(lists) {
+  return lists.map((l) => 'list-' + l.id);
+}
+
+function findContainer(id, items) {
+  if (typeof id !== 'string') return null;
+  if (id.startsWith('card-')) {
+    for (const [cid, cids] of Object.entries(items)) {
+      if (cids.includes(id)) return cid;
+    }
+    return null;
+  }
+  if (id.startsWith('list-')) return id;
+  return null;
+}
+
 export default function BoardContent({ boardId }) {
   const cards = useBoardStore((s) => s.cards);
   const allLists = useBoardStore((s) => s.lists);
 
-  // Lọc list thuộc board hiện tại + sắp xếp theo order
   const lists = useMemo(
     () => allLists
       .filter((l) => l.boardId === boardId)
@@ -128,34 +137,35 @@ export default function BoardContent({ boardId }) {
   const createList = useBoardStore((s) => s.createList);
   const deleteList = useBoardStore((s) => s.deleteList);
 
-  const [addingFor, setAddingFor] = useState(null); // listId đang mở input thêm card
+  const [addingFor, setAddingFor] = useState(null);
   const [newTitle, setNewTitle] = useState("");
-  const [activeCard, setActiveCard] = useState(null); // card đang được kéo (cho DragOverlay)
+  const [activeCard, setActiveCard] = useState(null);
   const [listName, setListName] = useState("");
   const cardError = newTitle.length > 50 ? 'Tiêu đề card không được quá 50 ký tự' : null
   const listError = listName.length > 50 ? 'Tên list không được quá 50 ký tự' : null
-  const [filterLabel, setFilterLabel] = useState(null); // ID label đang lọc
+  const [filterLabel, setFilterLabel] = useState(null);
 
-  // Schema Zod để validate title card khi thêm mới
+  // ── Drag state ──
+  // dragState (useState) drives cardItems/listOrder in render → triggers re-render on change
+  // dragStateRef (useRef) allows synchronous reads in event handlers (avoids stale closures)
+  const [dragState, setDragState] = useState(null);
+  const dragStateRef = useRef(null);
+
   const cardSchema = z.object({
     title: z.string().min(1, "Title required").max(200),
   });
 
-  // PointerSensor: yêu cầu di chuột ít nhất 5px mới bắt đầu drag
-  // Tránh vô tình kéo khi click chuột
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 5 },
     }),
   );
 
-  // Mở input thêm card cho list cụ thể
   const openAdd = (listId) => {
     setAddingFor(listId);
     setNewTitle("");
   };
 
-  // Đóng input thêm card
   const closeAdd = () => {
     setAddingFor(null);
     setNewTitle("");
@@ -180,123 +190,206 @@ export default function BoardContent({ boardId }) {
     setListName("");
   };
 
-  // cardsByList: nhóm cards theo listId, có áp dụng bộ lọc filterLabel
-  // Dùng useMemo để tránh tính toán lại mỗi lần render
   const cardsByList = useMemo(() => {
     const map = new Map();
     lists.forEach((l) => map.set(l.id, []));
     cards.forEach((c) => {
       if (!map.has(c.listId)) return;
-      // Nếu đang lọc label → bỏ qua card không có label đó
       if (filterLabel && !(c.labels || []).some((l) => l.id === filterLabel)) return;
       map.get(c.listId).push(c);
     });
     return map;
   }, [lists, cards, filterLabel]);
 
-  // ============================================================
-  // DRAG & DROP HANDLERS
-  // ============================================================
-  // Các handler này được @dnd-kit gọi tự động trong DndContext.
-  //
-  // onDragStart: khi bắt đầu kéo (chỉ sau khi PointerSensor vượt 5px)
-  //   → lưu active card vào state để DragOverlay hiển thị preview
-  //
-  // onDragEnd: khi thả chuột (dù có đặt vào drop zone hay không)
-  //   → active: element đang được kéo
-  //   → over: element bên dưới vị trí thả
-  //   Phân loại dựa vào data gửi kèm:
-  //     - active.data.current.list !== undefined → reorder list
-  //     - active.data.current.card !== undefined → move card
-  //   Đối với move card:
-  //     - over.id = "card-{id}" → chèn vào vị trí card đó
-  //     - over.id = "list-{id}" → chèn vào cuối list
-  //
-  // onDragCancel: khi hủy kéo (ESC, click chuột phải, ...)
-  //   → reset activeCard
+  const cardItems = useMemo(() => {
+    if (dragState) return dragState.cardItems;
+    return buildCardItems(lists, cardsByList);
+  }, [lists, cardsByList, dragState]);
 
-  // handleDragStart: lưu card đang kéo để DragOverlay hiển thị
-  const handleDragStart = (event) => {
-    setActiveCard(event.active.data.current?.card ?? null);
-  };
+  const listOrder = useMemo(() => {
+    if (dragState) return dragState.listOrder;
+    return buildListOrder(lists);
+  }, [lists, dragState]);
 
-  // handleDragEnd: xử lý khi thả — reorder list hoặc move card
-  const handleDragEnd = (event) => {
+  const cardMap = useMemo(() => buildCardMap(cards), [cards]);
+
+  const depsRef = useRef({ lists, cardsByList });
+  useEffect(() => {
+    depsRef.current = { lists, cardsByList };
+  });
+
+  // ── Handlers (tất cả đều STABLE với []) ──
+  const handleDragStart = useCallback((event) => {
+    const { active } = event;
+    const { lists, cardsByList } = depsRef.current;
+    const state = {
+      cardItems: buildCardItems(lists, cardsByList),
+      listOrder: buildListOrder(lists),
+      listChanged: false,
+    };
+    setDragState(state);
+    dragStateRef.current = state;
+
+    if (active.data.current?.type === 'card') {
+      setActiveCard(active.data.current.card);
+    }
+  }, []);
+
+  const handleDragOver = useCallback((event) => {
     const { active, over } = event;
-    setActiveCard(null);
+    if (!over || !active) return;
 
-    if (!active || !over) return;
+    const activeId = String(active.id);
+    const overId = String(over.id);
+    if (activeId === overId) return;
 
-    // === Reorder list ===
-    // Nếu active là list header (có data.list) → sắp xếp lại
-    if (active.data.current?.list) {
-      const overId = String(over.id);
-      const overParts = overId.split("-");
-      // over.id có dạng "list-{id}" (drop zone của list)
-      if (overParts[0] === "list") {
-        const targetListId = Number(overParts[1]);
-        if (!Number.isNaN(targetListId)) {
-          const reorderList = useBoardStore.getState().reorderList;
-          reorderList(active.data.current.list.id, targetListId);
+    const current = dragStateRef.current;
+    if (!current) return;
+
+    const cardItems = current.cardItems;
+
+    if (active.data.current?.type === 'card') {
+      const activeContainer = findContainer(activeId, cardItems);
+      if (!activeContainer) return;
+
+      let overContainer;
+      let overIndex;
+
+      if (overId.startsWith('card-')) {
+        overContainer = findContainer(overId, cardItems);
+        if (!overContainer) return;
+        const overCardIds = cardItems[overContainer] || [];
+        overIndex = overCardIds.indexOf(overId);
+        if (overIndex < 0) overIndex = overCardIds.length;
+      } else if (overId.startsWith('list-')) {
+        overContainer = overId;
+        overIndex = (cardItems[overId] || []).length;
+      } else {
+        return;
+      }
+
+      // Chỉ xử lý cross-container trong dragOver (same-container để DndKit handle layout)
+      if (activeContainer === overContainer) return;
+
+      const currentOverArr = cardItems[overContainer] || [];
+      let nextCardItems;
+
+      if (currentOverArr.includes(activeId)) {
+        const oldIndex = currentOverArr.indexOf(activeId);
+        let newIndex = overIndex;
+        if (oldIndex < newIndex) newIndex = Math.min(newIndex, currentOverArr.length);
+        console.log('dragOver cross same-target reorder', { activeId, overId, oldIndex, newIndex });
+        if (oldIndex === newIndex) return;
+
+        nextCardItems = {
+          ...cardItems,
+          [overContainer]: arrayMove([...currentOverArr], oldIndex, newIndex),
+        };
+      } else {
+        const activeCardIds = cardItems[activeContainer].filter((id) => id !== activeId);
+        const overCardIds = [...currentOverArr];
+        const newIndex = Math.min(overIndex, overCardIds.length);
+        console.log('dragOver cross-container fresh', { activeId, overId, activeContainer, overContainer, newIndex });
+        overCardIds.splice(newIndex, 0, activeId);
+
+        nextCardItems = {
+          ...cardItems,
+          [activeContainer]: activeCardIds,
+          [overContainer]: overCardIds,
+        };
+      }
+
+      if (nextCardItems) {
+        const next = { ...current, cardItems: nextCardItems };
+        setDragState(next);
+        dragStateRef.current = next;
+      }
+    }
+
+    if (active.data.current?.type === 'list') {
+      if (!overId.startsWith('list-')) return;
+      const lo = current.listOrder;
+      const oldIndex = lo.indexOf(activeId);
+      const newIndex = lo.indexOf(overId);
+      if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return;
+
+      const next = {
+        ...current,
+        listOrder: arrayMove([...lo], oldIndex, newIndex),
+        listChanged: true,
+      };
+      setDragState(next);
+      dragStateRef.current = next;
+    }
+  }, []);
+
+  const handleDragEnd = useCallback((event) => {
+    const { active, over } = event;
+
+    if (active && over) {
+      const store = useBoardStore.getState();
+
+      if (active.data.current?.type === 'card') {
+        const activeCard = active.data.current.card;
+        const activeCardId = activeCard.id;
+        const sourceListId = activeCard.listId;
+        const overId = String(over.id);
+
+        // Dùng base state (không drag) để tính target position
+        const { lists, cardsByList } = depsRef.current;
+        const baseCardItems = buildCardItems(lists, cardsByList);
+
+        let targetListId = sourceListId;
+        let targetIndex;
+
+        if (overId.startsWith('card-')) {
+          const overContainer = findContainer(overId, baseCardItems);
+          if (overContainer) {
+            targetListId = Number(overContainer.replace('list-', ''));
+            const ids = baseCardItems[overContainer] || [];
+            targetIndex = ids.indexOf(overId);
+            if (targetIndex < 0) targetIndex = ids.length;
+          } else {
+            targetIndex = 0;
+          }
+        } else if (overId.startsWith('list-')) {
+          targetListId = Number(overId.replace('list-', ''));
+          targetIndex = (baseCardItems[overId] || []).length;
+        } else {
+          targetIndex = 0;
+        }
+
+        console.log('handleDragEnd', { activeCardId, sourceListId, targetListId, targetIndex, overId });
+        store.moveCard(activeCardId, targetListId, targetIndex);
+      } else if (active.data.current?.type === 'list') {
+        const overId = String(over.id);
+        if (overId.startsWith('list-')) {
+          const targetListId = Number(overId.replace('list-', ''));
+          store.reorderList(active.data.current.list.id, targetListId);
         }
       }
-      return;
     }
 
-    // === Move card ===
-    const activeCardId = active.data.current?.card?.id;
-    if (!activeCardId) return;
-
-    const moveCard = useBoardStore.getState().moveCard;
-    const allCards = useBoardStore.getState().cards;
-    const activeCardData = allCards.find((c) => c.id === activeCardId);
-    if (!activeCardData) return;
-
-    // Parse over.id: "card-{id}" hoặc "list-{id}"
-    const overId = String(over.id);
-    const parts = overId.split("-");
-    const overType = parts[0];    // "card" hoặc "list"
-    const overIdNum = Number(parts[1]);
-    if (Number.isNaN(overIdNum)) return;
-
-    const otherCards = allCards.filter((c) => c.id !== activeCardId);
-
-    if (overType === "card") {
-      // Thả lên một card khác → tìm vị trí card đó trong list
-      // và chèn active card ngay trước vị trí đó
-      const overCard = allCards.find((c) => c.id === overIdNum);
-      if (!overCard) return;
-      const targetListId = overCard.listId;
-      const targetListCards = otherCards.filter((c) => c.listId === targetListId);
-      const overIdx = targetListCards.findIndex((c) => c.id === overIdNum);
-      const targetIndex = overIdx >= 0 ? overIdx : targetListCards.length;
-      moveCard(activeCardId, targetListId, targetIndex);
-    } else if (overType === "list") {
-      // Thả vào vùng trống của list → chèn vào cuối list
-      const targetListId = overIdNum;
-      const targetListCards = otherCards.filter((c) => c.listId === targetListId);
-      moveCard(activeCardId, targetListId, targetListCards.length);
-    }
-  };
-
-  // handleDragCancel: reset khi kéo bị hủy giữa chừng
-  const handleDragCancel = () => {
     setActiveCard(null);
-  };
+    setDragState(null);
+    dragStateRef.current = null;
+  }, []);
+
+  const handleDragCancel = useCallback(() => {
+    setActiveCard(null);
+    setDragState(null);
+    dragStateRef.current = null;
+  }, []);
 
   return (
-    // DndContext: component bao bọc của @dnd-kit, quản lý toàn bộ state drag
-    // - sensors: cấu hình cảm biến (PointerSensor với 5px threshold)
-    // - onDragStart/onDragEnd/onDragCancel: lifecycle handlers
-    // Tất cả useDroppable/useDraggable bên trong đều thuộc context này
     <DndContext
       sensors={sensors}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
+      onDragOver={handleDragOver}
     >
       <div className="board-columns">
-        {/* Filter bar: hiển thị khi đang lọc theo label */}
         {filterLabel && (
           <div className="filter-bar">
             <span>Filtering by label</span>
@@ -304,45 +397,53 @@ export default function BoardContent({ boardId }) {
           </div>
         )}
 
-        {/* Render từng ListColumn */}
-        {lists.map((list) => (
-          <ListColumn key={list.id} list={list} onDelete={deleteList}>
-            {/* Card trong list */}
-            {(cardsByList.get(list.id) || []).map((card) => (
-              <Card
-                key={card.id}
-                card={card}
-                // onLabelClick: toggle filter — click lại label đang lọc → bỏ lọc
-                onLabelClick={(labelId) => setFilterLabel(labelId === filterLabel ? null : labelId)}
-                activeLabel={filterLabel}
-              />
-            ))}
-            {/* Add card: input hoặc button, toggle theo addingFor state */}
-            <div className="add-card-area">
-              {addingFor === list.id ? (
-                <Input size="sm"
-                  autoFocus
-                  className="add-card-input"
-                  value={newTitle}
-                  onChange={(e) => setNewTitle(e.target.value)}
-                  onBlur={closeAdd}
-                  error={cardError}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") submitAdd();
-                    if (e.key === "Escape") closeAdd();
-                  }}
-                  placeholder="Enter card title and press Enter"
-                />
-              ) : (
-                <button className="add-card-btn" onClick={() => openAdd(list.id)}>
-                  + Add a card
-                </button>
-              )}
-            </div>
-          </ListColumn>
-        ))}
+        <SortableContext items={listOrder} strategy={horizontalListSortingStrategy}>
+          {listOrder.map((listId) => {
+            const list = lists.find((l) => 'list-' + l.id === listId);
+            if (!list) return null;
+            const cardIds = cardItems[listId] ?? EMPTY_ITEMS;
+            return (
+              <ListColumn key={listId} list={list} onDelete={deleteList}>
+                <SortableContext items={cardIds} strategy={verticalListSortingStrategy}>
+                  {cardIds.map((cardId) => {
+                    const card = cardMap[cardId];
+                    if (!card) return null;
+                    return (
+                      <Card
+                        key={cardId}
+                        card={card}
+                        onLabelClick={(labelId) => setFilterLabel(labelId === filterLabel ? null : labelId)}
+                        activeLabel={filterLabel}
+                      />
+                    );
+                  })}
+                </SortableContext>
+                <div className="add-card-area">
+                  {addingFor === list.id ? (
+                    <Input size="sm"
+                      autoFocus
+                      className="add-card-input"
+                      value={newTitle}
+                      onChange={(e) => setNewTitle(e.target.value)}
+                      onBlur={closeAdd}
+                      error={cardError}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") submitAdd();
+                        if (e.key === "Escape") closeAdd();
+                      }}
+                      placeholder="Enter card title and press Enter"
+                    />
+                  ) : (
+                    <button className="add-card-btn" onClick={() => openAdd(list.id)}>
+                      + Add a card
+                    </button>
+                  )}
+                </div>
+              </ListColumn>
+            );
+          })}
+        </SortableContext>
 
-        {/* Form thêm list mới — luôn ở cuối cùng */}
         <form className="add-list-form" onSubmit={handleAddList}>
           <Input size="sm"
             placeholder="+ Add list"
@@ -352,8 +453,6 @@ export default function BoardContent({ boardId }) {
           />
         </form>
 
-        {/* DragOverlay: preview floating khi kéo card
-            Vị trí tự động theo chuột, không ảnh hưởng layout gốc */}
         <DragOverlay>
           {activeCard ? (
             <div className="card drag-overlay">{activeCard.title}</div>

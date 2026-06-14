@@ -13,9 +13,14 @@ const inputVariants = cva(
         sm: "h-7 rounded-md px-2 text-xs",
         lg: "h-9 px-3 py-2 text-sm",
       },
+      state: {
+        default: "",
+        error: "border-red-600 ring-2 ring-red-500/40 focus-visible:border-red-600 focus-visible:ring-red-500/60",
+      },
     },
     defaultVariants: {
       size: "default",
+      state: "default",
     },
   },
 );
@@ -28,14 +33,13 @@ function Input({ className, size, error, ...props }) {
       <InputPrimitive
         data-slot="input"
         className={cn(
-          inputVariants({ size, className }),
-          error && "border-red-600 ring-2 ring-red-500/40 focus-visible:border-red-600 focus-visible:ring-red-500/60",
+          inputVariants({ size, state: error ? "error" : "default", className }),
         )}
         aria-describedby={error ? errorId : undefined}
         {...props}
       />
       {error && (
-        <p id={errorId} className="text-xs text-red-600 font-medium">
+        <p id={errorId} className="text-xs text-destructive font-medium">
           {error}
         </p>
       )}

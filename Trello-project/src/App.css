@@ -89,7 +89,9 @@
   font-family: inherit;
   font-size: 14px;
   font-weight: 500;
-  transition: background 0.15s, opacity 0.15s;
+  transition:
+    background 0.15s,
+    opacity 0.15s;
 }
 
 .btn:disabled {
@@ -175,13 +177,23 @@
 }
 
 @keyframes modalFadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes modalScaleIn {
-  from { transform: scale(0.98); opacity: 0; }
-  to { transform: scale(1); opacity: 1; }
+  from {
+    transform: scale(0.98);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
 @media (max-width: 480px) {
@@ -265,7 +277,7 @@
   cursor: grab;
 }
 
-.card p {
+.card > p {
   margin: 0;
   font-size: 14px;
   color: var(--text-h);
@@ -440,7 +452,9 @@
   border-radius: 4px;
   line-height: 1;
   opacity: 0;
-  transition: opacity 0.15s, background 0.15s;
+  transition:
+    opacity 0.15s,
+    background 0.15s;
 }
 
 .board-card-wrapper:hover .board-delete-btn,
@@ -595,6 +609,10 @@
 
 .card.dragging {
   opacity: 0.5;
+}
+
+[data-card-id] {
+  transition: transform 0.2s ease;
 }
 
 .board-column--dragging {
