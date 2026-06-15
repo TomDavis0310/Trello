@@ -310,7 +310,6 @@ export default function BoardContent({ boardId }) {
 
       if (nextCardItems) {
         const next = { ...current, cardItems: nextCardItems };
-        setDragState(next);
         dragStateRef.current = next;
       }
     }
@@ -342,14 +341,17 @@ export default function BoardContent({ boardId }) {
 
     if (active && over) {
       const store = useBoardStore.getState();
+      const activeId = String(active.id);
 
-      if (active.data.current?.type === 'card') {
-        const activeCard = active.data.current.card;
+      if (activeId.startsWith('card-')) {
+        const activeCard =
+          active.data.current?.card ??
+          store.cards.find((c) => c.id === Number(activeId.replace('card-', '')));
+        if (!activeCard) return;
         const activeCardId = activeCard.id;
         const sourceListId = activeCard.listId;
         const overId = String(over.id);
 
-        // Dùng base state (không drag) để tính target position
         const { lists, cardsByList } = depsRef.current;
         const baseCardItems = buildCardItems(lists, cardsByList);
 
@@ -373,13 +375,13 @@ export default function BoardContent({ boardId }) {
           targetIndex = 0;
         }
 
-        console.log('handleDragEnd', { activeCardId, sourceListId, targetListId, targetIndex, overId, dragOverCount: dragOverCountRef.current });
         store.moveCard(activeCardId, targetListId, targetIndex);
-      } else if (active.data.current?.type === 'list') {
+      } else if (activeId.startsWith('list-')) {
         const overId = String(over.id);
         if (overId.startsWith('list-')) {
+          const listId = active.data.current?.list?.id ?? Number(activeId.replace('list-', ''));
           const targetListId = Number(overId.replace('list-', ''));
-          store.reorderList(active.data.current.list.id, targetListId);
+          store.reorderList(listId, targetListId);
         }
       }
     }
