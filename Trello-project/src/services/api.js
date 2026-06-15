@@ -1,76 +1,126 @@
-// === Mock API ===
-// Giả lập backend xác thực, lưu người dùng vào localStorage.
-// Các hàm đều mô phỏng async (setTimeout 300ms) để giống network request thật.
-// `authStore` gọi các phương thức này để thực hiện login/register/logout.
+const TOKEN_KEY = "trello-token";
+const BASE = "/api";
 
-const STORAGE_KEY = "trello-users";
+async function request(method, path, body) {
+  const token = localStorage.getItem(TOKEN_KEY);
+  const headers = { "Content-Type": "application/json" };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
 
-// Lấy danh sách users từ localStorage
-function getUsers() {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  return raw ? JSON.parse(raw) : [];
-}
+  const res = await fetch(`${BASE}${path}`, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  });
 
-// Ghi danh sách users vào localStorage
-function saveUsers(users) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(users));
-}
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error || "Request failed");
+  }
 
-// Loại bỏ trường password khỏi object user trước khi lưu session hoặc trả về
-function stripPassword(user) {
-  const safe = { ...user };
-  delete safe.password;
-  return safe;
-}
-
-// Lưu user hiện tại vào session (localStorage) – dùng để duy trì đăng nhập
-function setCurrentUser(user) {
-  localStorage.setItem(
-    "trello-current-user",
-    JSON.stringify(stripPassword(user)),
-  );
+  if (res.status === 204) return null;
+  return res.json();
 }
 
 export const api = {
-  // === login ===
-  // Tìm user trong danh sách theo email + password, nếu khớp thì set session và trả về.
-  // Nếu không tìm thấy, ném lỗi "Invalid email or password".
   async login(email, password) {
-    await new Promise((r) => setTimeout(r, 300));
-    const users = getUsers();
-    const user = users.find(
-      (u) => u.email === email && u.password === password,
-    );
-    if (!user) throw new Error("Invalid email or password");
-    setCurrentUser(user);
-    return stripPassword(user);
+    const data = await request("POST", "/auth/login", { email, password });
+    localStorage.setItem(TOKEN_KEY, data.token);
+    return data.user;
   },
 
-  // === register ===
-  // Kiểm tra email đã tồn tại chưa; nếu chưa thì tạo user mới, lưu và set session.
   async register(email, password) {
-    await new Promise((r) => setTimeout(r, 300));
-    const users = getUsers();
-    if (users.find((u) => u.email === email)) {
-      throw new Error("Email already registered");
-    }
-    const user = { id: Date.now(), email, password, name: email.split("@")[0] };
-    users.push(user);
-    saveUsers(users);
-    setCurrentUser(user);
-    return stripPassword(user);
+    const data = await request("POST", "/auth/register", { email, password });
+    localStorage.setItem(TOKEN_KEY, data.token);
+    return data.user;
   },
 
-  // === logout ===
-  // Xóa session user khỏi localStorage
   async logout() {
-    localStorage.removeItem("trello-current-user");
+    try {
+      await request("POST", "/auth/logout");
+    } finally {
+      localStorage.removeItem(TOKEN_KEY);
+    }
   },
 
-  // === getCurrentUser ===
-  // Lấy user của session hiện tại (nếu có)
   getCurrentUser() {
-    const raw = localStorage.getItem("trello-current-user");
-    return raw ? JSON.parse(raw) : null;
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (!token) return null;
+    return request("GET", "/auth/me");
+  },
+
+  async getData() {
+    return request("GET", "/data");
+  },
+
+  async createBoard(name) {
+    return request("POST", "/boards", { name });
+  },
+
+  async updateBoard(id, data) {
+    return request("PUT", `/boards/${id}`, data);
+  },
+
+  async deleteBoard(id) {
+    return request("DELETE", `/boards/${id}`);
+  },
+
+  async getBoards() {
+    return request("GET", "/boards");
+  },
+
+  async getBoard(id) {
+    return request("GET", `/boards/${id}`);
+  },
+
+  async createList(boardId, name) {
+    return request("POST", "/lists", { boardId, name });
+  },
+
+  async updateList(id, data) {
+    return request("PUT", `/lists/${id}`, data);
+  },
+
+  async deleteList(id) {
+    return request("DELETE", `/lists/${id}`);
+  },
+
+  async reorderList(listId, targetListId) {
+    return request("PUT", `/lists/${listId}`, { targetListId });
+  },
+
+  async createCard(listId, title) {
+    return request("POST", "/cards", { listId, title });
+  },
+
+  async updateCard(id, data) {
+    return request("PUT", `/cards/${id}`, data);
+  },
+
+  async deleteCard(id) {
+    return request("DELETE", `/cards/${id}`);
+  },
+
+  async moveCard(cardId, targetListId) {
+    return request("POST", "/cards", { _action: "move", cardId, targetListId });
+  },
+
+  async addComment(cardId, text, author) {
+    return request("PUT", `/cards/${cardId}`, { _action: "comment", text, author });
+  },
+
+  async deleteComment(cardId, commentId) {
+    return request("PUT", `/cards/${cardId}`, { _action: "deleteComment", commentId });
+  },
+
+  async addLabel(cardId, color, text) {
+    return request("PUT", `/cards/${cardId}`, { _action: "label", color, text });
+  },
+
+  async removeLabel(cardId, labelId) {
+    return request("PUT", `/cards/${cardId}`, { _action: "removeLabel", labelId });
+  },
+
+  async setDueDate(cardId, dueDate) {
+    return request("PUT", `/cards/${cardId}`, { _action: "dueDate", dueDate });
   },
 };

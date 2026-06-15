@@ -150,6 +150,7 @@ export default function BoardContent({ boardId }) {
   // dragStateRef (useRef) allows synchronous reads in event handlers (avoids stale closures)
   const [dragState, setDragState] = useState(null);
   const dragStateRef = useRef(null);
+  const dragOverCountRef = useRef(0);
 
   const cardSchema = z.object({
     title: z.string().min(1, "Title required").max(200),
@@ -229,6 +230,7 @@ export default function BoardContent({ boardId }) {
     };
     setDragState(state);
     dragStateRef.current = state;
+    dragOverCountRef.current = 0;
 
     if (active.data.current?.type === 'card') {
       setActiveCard(active.data.current.card);
@@ -247,6 +249,7 @@ export default function BoardContent({ boardId }) {
     if (!current) return;
 
     const cardItems = current.cardItems;
+    const count = ++dragOverCountRef.current;
 
     if (active.data.current?.type === 'card') {
       const activeContainer = findContainer(activeId, cardItems);
@@ -268,6 +271,12 @@ export default function BoardContent({ boardId }) {
         return;
       }
 
+      console.log(
+        `[dragOver #${count}] card`,
+        { activeId, overId, activeContainer, overContainer, overIndex },
+        `same=${activeContainer === overContainer}`,
+      );
+
       // Chỉ xử lý cross-container trong dragOver (same-container để DndKit handle layout)
       if (activeContainer === overContainer) return;
 
@@ -278,7 +287,7 @@ export default function BoardContent({ boardId }) {
         const oldIndex = currentOverArr.indexOf(activeId);
         let newIndex = overIndex;
         if (oldIndex < newIndex) newIndex = Math.min(newIndex, currentOverArr.length);
-        console.log('dragOver cross same-target reorder', { activeId, overId, oldIndex, newIndex });
+        console.log(`[dragOver #${count}] cross same-target reorder`, { activeId, overId, oldIndex, newIndex });
         if (oldIndex === newIndex) return;
 
         nextCardItems = {
@@ -289,7 +298,7 @@ export default function BoardContent({ boardId }) {
         const activeCardIds = cardItems[activeContainer].filter((id) => id !== activeId);
         const overCardIds = [...currentOverArr];
         const newIndex = Math.min(overIndex, overCardIds.length);
-        console.log('dragOver cross-container fresh', { activeId, overId, activeContainer, overContainer, newIndex });
+        console.log(`[dragOver #${count}] cross-container fresh`, { activeId, overId, activeContainer, overContainer, newIndex });
         overCardIds.splice(newIndex, 0, activeId);
 
         nextCardItems = {
@@ -312,6 +321,11 @@ export default function BoardContent({ boardId }) {
       const oldIndex = lo.indexOf(activeId);
       const newIndex = lo.indexOf(overId);
       if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return;
+
+      console.log(
+        `[dragOver #${count}] list`,
+        { activeId, overId, oldIndex, newIndex },
+      );
 
       const next = {
         ...current,
@@ -359,7 +373,7 @@ export default function BoardContent({ boardId }) {
           targetIndex = 0;
         }
 
-        console.log('handleDragEnd', { activeCardId, sourceListId, targetListId, targetIndex, overId });
+        console.log('handleDragEnd', { activeCardId, sourceListId, targetListId, targetIndex, overId, dragOverCount: dragOverCountRef.current });
         store.moveCard(activeCardId, targetListId, targetIndex);
       } else if (active.data.current?.type === 'list') {
         const overId = String(over.id);

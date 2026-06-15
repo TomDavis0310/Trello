@@ -10,6 +10,7 @@ import ConfirmModal from "../../../components/common/ConfirmModal";
 //   - Nút × để xóa (có confirm modal)
 export default function BoardList() {
   const boards = useBoardStore((s) => s.boards);
+  const isLoading = useBoardStore((s) => s.isLoading);
   const deleteBoard = useBoardStore((s) => s.deleteBoard);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pendingBoard, setPendingBoard] = useState(null);
@@ -30,7 +31,8 @@ export default function BoardList() {
 
   return (
     <div className="board-list">
-      {boards.length === 0 && (
+      {isLoading && <p className="loading-state">Loading boards...</p>}
+      {!isLoading && boards.length === 0 && (
         <p className="empty-state">No boards yet. Create one!</p>
       )}
       {boards.map((board) => (

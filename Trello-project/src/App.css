@@ -420,6 +420,12 @@
   font-size: 14px;
 }
 
+.loading-state {
+  color: var(--text);
+  font-size: 14px;
+  font-style: italic;
+}
+
 .board-card-wrapper {
   position: relative;
 }

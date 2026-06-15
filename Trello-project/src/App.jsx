@@ -1,15 +1,12 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { BrowserRouter } from "react-router-dom";
 import AppRoutes from "./routes";
 import Layout from "./components/layout/Layout";
 import useBoardStore from "./store/boardStore";
 import useUiStore from "./store/uiStore";
+import useAuthStore from "./store/authStore";
 import "./App.css";
 
-// === ThemeInit ===
-// Áp dụng data-theme + .dark class lên <html> mỗi khi theme thay đổi.
-// - data-theme: dùng cho CSS selector `[data-theme="dark"]` (custom variables)
-// - .dark: dùng cho shadcn/ui (Tailwind dark mode variant)
 function ThemeInit() {
   const theme = useUiStore((s) => s.theme);
   useEffect(() => {
@@ -20,15 +17,25 @@ function ThemeInit() {
   return null;
 }
 
-// === AppInit ===
-// Component không render gì cả (trả về null). Chỉ dùng để gọi `fetchBoards` một lần
-// khi component mount, nhằm nạp dữ liệu board/list/card đã persist từ localStorage
-// trước khi người dùng tương tác với ứng dụng.
 function AppInit() {
   const fetchBoards = useBoardStore((s) => s.fetchBoards);
+  const initAuth = useAuthStore((s) => s.init);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const hasFetched = useRef(false);
+
   useEffect(() => {
-    fetchBoards();
-  }, [fetchBoards]);
+    initAuth();
+  }, []);
+
+  useEffect(() => {
+    if (isAuthenticated && !hasFetched.current) {
+      hasFetched.current = true;
+      fetchBoards();
+    }
+    if (!isAuthenticated) {
+      hasFetched.current = false;
+    }
+  }, [isAuthenticated, fetchBoards]);
 
   return null;
 }
