@@ -64,7 +64,13 @@ export default function ListColumn({
             className="list-drag-handle invisible group-hover:visible group-focus-within:visible flex items-center justify-center w-6 h-6 rounded cursor-grab shrink-0"
             {...listeners}
             {...attributes}
-          />
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+              <circle cx="8" cy="3" r="1.5" />
+              <circle cx="8" cy="8" r="1.5" />
+              <circle cx="8" cy="13" r="1.5" />
+            </svg>
+          </button>
           <h3 className="flex-1 min-w-0">{list.name}</h3>
           <button
             className="list-delete-btn"

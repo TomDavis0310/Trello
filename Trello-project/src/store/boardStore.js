@@ -251,7 +251,6 @@ const useBoardStore = create(
         const prevCards = get().cards;
         const cid = Number(cardId);
         const tlid = Number(targetListId);
-
         const card = prevCards.find((c) => Number(c.id) === cid);
         if (!card) return;
 
