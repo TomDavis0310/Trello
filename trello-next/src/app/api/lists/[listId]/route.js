@@ -1,11 +1,9 @@
-import { NextResponse } from "next/server";
+import { apiResponse } from "@/lib/apiResponse.js";
 import * as ctrl from "@/lib/controllers/listController.js";
 
 export async function GET(_req, { params }) {
   const r = ctrl.getList(Number((await params).listId));
-  return NextResponse.json(r.error ? { error: r.error } : r.data, {
-    status: r.status,
-  });
+  return apiResponse(r);
 }
 
 export async function PUT(request, { params }) {
@@ -16,14 +14,10 @@ export async function PUT(request, { params }) {
     ? ctrl.reorderList(id, body)
     : ctrl.updateList(id, body);
 
-  return NextResponse.json(r.error ? { error: r.error } : r.data, {
-    status: r.status,
-  });
+  return apiResponse(r);
 }
 
 export async function DELETE(_req, { params }) {
   const r = ctrl.deleteList(Number((await params).listId));
-  return NextResponse.json(r.error ? { error: r.error } : r.data, {
-    status: r.status,
-  });
+  return apiResponse(r);
 }

@@ -1,12 +1,10 @@
-import { NextResponse } from "next/server";
+import { apiResponse } from "@/lib/apiResponse.js";
 import * as ctrl from "@/lib/controllers/cardController.js";
 
 export async function GET(_req, { params }) {
   const id = Number((await params).cardId);
   const r = ctrl.getCard(id);
-  return NextResponse.json(r.error ? { error: r.error } : r.data, {
-    status: r.status,
-  });
+  return apiResponse(r);
 }
 
 export async function PUT(request, { params }) {
@@ -25,15 +23,11 @@ export async function PUT(request, { params }) {
     ? actions[body._action]()
     : ctrl.updateCard(id, body);
 
-  return NextResponse.json(r.error ? { error: r.error } : r.data, {
-    status: r.status,
-  });
+  return apiResponse(r);
 }
 
 export async function DELETE(_req, { params }) {
   const id = Number((await params).cardId);
   const r = ctrl.deleteCard(id);
-  return NextResponse.json(r.error ? { error: r.error } : r.data, {
-    status: r.status,
-  });
+  return apiResponse(r);
 }

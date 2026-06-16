@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { apiResponse } from "@/lib/apiResponse.js";
 import * as ctrl from "@/lib/controllers/cardController.js";
 
 export async function POST(request) {
@@ -6,13 +6,9 @@ export async function POST(request) {
 
   if (body?._action === "move") {
     const r = ctrl.moveCard(body);
-    return NextResponse.json(r.error ? { error: r.error } : r.data, {
-      status: r.status,
-    });
+    return apiResponse(r);
   }
 
   const r = ctrl.createCard(body);
-  return NextResponse.json(r.error ? { error: r.error } : r.data, {
-    status: r.status,
-  });
+  return apiResponse(r);
 }

@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { apiResponse } from "@/lib/apiResponse.js";
 import * as db from "@/lib/data/mockData.js";
 
 export async function GET(request) {
@@ -6,8 +6,8 @@ export async function GET(request) {
   const token = headers?.authorization?.replace("Bearer ", "");
   const user = db.getUserByToken(token);
   if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return apiResponse({ error: "Unauthorized", status: 401 });
   }
   const data = db.getUserData(user.id);
-  return NextResponse.json(data);
+  return apiResponse({ data, status: 200 });
 }
