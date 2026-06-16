@@ -5,7 +5,7 @@ import {
   SortableContext,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import Card from "../../../components/ui/Card";
+import Card from "./Card";
 import { Input } from "../../../components/ui/Input";
 import ConfirmModal from "../../../components/common/ConfirmModal";
 

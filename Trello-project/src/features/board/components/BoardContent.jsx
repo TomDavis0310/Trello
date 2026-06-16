@@ -201,7 +201,7 @@ export default function BoardContent({ boardId }) {
     // Phân tích xem điểm chuột đang đè lên (overId) thuộc về Card hay List rỗng
     if (findContainer(overId, currentClone)) {
       overListId = findContainer(overId, currentClone);
-    } else if (currentClone[overId]) {
+    } else if (currentClone[overId] || over.data.current?.type === "list") {
       overListId = overId;
     }
 
@@ -261,7 +261,12 @@ export default function BoardContent({ boardId }) {
 
         const finalClone = clonedCardsRef.current;
         const sourceListId = String(activeCard.listId);
-        let targetListId = findContainer(activeId, finalClone) || sourceListId;
+        let targetListId = findContainer(activeId, finalClone);
+        if (over.data.current?.type === "list") {
+          targetListId = overId;
+        } else if (!targetListId) {
+          targetListId = sourceListId;
+        }
         let targetIndex = 0;
 
         if (sourceListId === targetListId) {

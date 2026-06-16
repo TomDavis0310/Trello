@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "../ui/Button";
-import { Switch } from "../ui/switch";
+import { Switch } from "../ui/Switch";
 import useAuthStore from "../../store/authStore";
 import useUiStore from "../../store/uiStore";
 
