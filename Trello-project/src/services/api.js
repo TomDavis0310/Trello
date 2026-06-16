@@ -4,13 +4,44 @@ const BASE = "/api";
 async function request(method, path, body) {
   const token = localStorage.getItem(TOKEN_KEY);
   const headers = { "Content-Type": "application/json" };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  // Gửi duy nhất 1 chuẩn quốc tế Bearer Token lên Backend
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
 
   const res = await fetch(`${BASE}${path}`, {
     method,
     headers,
     body: body ? JSON.stringify(body) : undefined,
   });
+
+  // 🚀 XỬ LÝ LỖI 401 THÔNG MINH: Tránh vòng lặp vô tận và mất token khi kéo thả
+  if (res.status === 401) {
+    const isAuthRequest = path.includes("/auth/me") || path.includes("/data");
+
+    if (isAuthRequest) {
+      // Chỉ xóa token rác khi thực sự lỗi phiên đăng nhập gốc
+      localStorage.removeItem(TOKEN_KEY);
+
+      const isAtAuthPage =
+        window.location.pathname.includes("/login") ||
+        window.location.pathname.includes("/register");
+
+      if (!isAtAuthPage) {
+        window.location.href = "/login";
+      }
+      throw new Error("Session expired. Please log in again.");
+    } else {
+      // Nếu dính 401 ở các request kéo thả/thao tác, báo lỗi ra console/alert để sửa Backend, KHÔNG xóa token.
+      console.error(
+        `🚨 Endpoint Backend [${method} ${path}] chưa cấu hình bóc tách Bearer Token nên trả về 401!`,
+      );
+      throw new Error(
+        `Unauthorized action at: ${path}. Check backend route authentication.`,
+      );
+    }
+  }
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
@@ -105,19 +136,33 @@ export const api = {
   },
 
   async addComment(cardId, text, author) {
-    return request("PUT", `/cards/${cardId}`, { _action: "comment", text, author });
+    return request("PUT", `/cards/${cardId}`, {
+      _action: "comment",
+      text,
+      author,
+    });
   },
 
   async deleteComment(cardId, commentId) {
-    return request("PUT", `/cards/${cardId}`, { _action: "deleteComment", commentId });
+    return request("PUT", `/cards/${cardId}`, {
+      _action: "deleteComment",
+      commentId,
+    });
   },
 
   async addLabel(cardId, color, text) {
-    return request("PUT", `/cards/${cardId}`, { _action: "label", color, text });
+    return request("PUT", `/cards/${cardId}`, {
+      _action: "label",
+      color,
+      text,
+    });
   },
 
   async removeLabel(cardId, labelId) {
-    return request("PUT", `/cards/${cardId}`, { _action: "removeLabel", labelId });
+    return request("PUT", `/cards/${cardId}`, {
+      _action: "removeLabel",
+      labelId,
+    });
   },
 
   async setDueDate(cardId, dueDate) {

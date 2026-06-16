@@ -1,167 +1,111 @@
-import { useMemo, useState, useRef, useCallback, useEffect } from "react";
-
-const EMPTY_ITEMS = [];
-import { DndContext, DragOverlay } from "@dnd-kit/core";
-import { useSensors, useSensor, PointerSensor } from "@dnd-kit/core";
+import { useMemo, useState, useRef, useCallback } from "react";
+import {
+  DndContext,
+  DragOverlay,
+  useSensors,
+  useSensor,
+  PointerSensor,
+} from "@dnd-kit/core";
 import {
   SortableContext,
-  verticalListSortingStrategy,
   horizontalListSortingStrategy,
   arrayMove,
-  useSortable,
 } from "@dnd-kit/sortable";
 import useBoardStore from "../../../store/boardStore";
-import Card from "../../../components/ui/Card";
-import { Input } from "../../../components/ui/Input";
-import ConfirmModal from "../../../components/common/ConfirmModal";
-import { z } from "zod";
+import ListColumn from "./ListColumn";
 
-function ListColumn({ list, children, onDelete }) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({
-    id: `list-${list.id}`,
-    data: { type: 'list', list },
-    handle: true,
+// --- CÁC HÀM TRỢ GIÚP CHUẨN HÓA DỮ LIỆU (ID SẠCH - DẠNG STRING CHO DND-KIT) ---
+const EMPTY_ITEMS = [];
+
+function buildCardsByList(cards) {
+  const map = {};
+  cards.forEach((c) => {
+    const key = String(c.listId);
+    if (!map[key]) map[key] = [];
+    map[key].push(String(c.id));
   });
+  return map;
+}
 
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-
-  const style = {
-    transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
-    transition,
-  };
-
-  return (
-    <div
-      ref={setNodeRef}
-      className={`board-column-wrapper${isDragging ? " board-column--dragging" : ""}`}
-      style={style}
-    >
-      <div className="board-column">
-        <div className="column-header group" style={{ justifyContent: 'normal' }}>
-          <button
-            className="list-drag-handle invisible group-hover:visible group-focus-within:visible flex items-center justify-center w-6 h-6 rounded cursor-grab shrink-0"
-            {...listeners}
-            {...attributes}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-              <circle cx="8" cy="3" r="1.5"/>
-              <circle cx="8" cy="8" r="1.5"/>
-              <circle cx="8" cy="13" r="1.5"/>
-            </svg>
-          </button>
-          <h3 className="flex-1 min-w-0">{list.name}</h3>
-          <button
-            className="list-delete-btn"
-            title="Delete list"
-            onClick={(e) => {
-              e.stopPropagation();
-              setShowDeleteConfirm(true);
-            }}
-          >
-            &times;
-          </button>
-        </div>
-        <div className="column-cards">
-          {children}
-        </div>
-      </div>
-
-      <ConfirmModal
-        isOpen={showDeleteConfirm}
-        onCancel={() => setShowDeleteConfirm(false)}
-        onConfirm={() => {
-          onDelete(list.id);
-          setShowDeleteConfirm(false);
-        }}
-        title={`Delete "${list.name}"`}
-        message={
-          <>
-            <p>Are you sure you want to delete this list and all its cards?</p>
-            <p className="muted">This action cannot be undone.</p>
-          </>
-        }
-      />
-    </div>
-  );
+function buildListIds(lists) {
+  return lists.map((l) => String(l.id));
 }
 
 function buildCardMap(cards) {
   const map = {};
-  cards.forEach((c) => { map['card-' + c.id] = c; });
-  return map;
-}
-
-function buildCardItems(lists, cardsByList) {
-  const map = {};
-  lists.forEach((l) => {
-    map['list-' + l.id] = (cardsByList.get(l.id) || []).map((c) => 'card-' + c.id);
+  cards.forEach((c) => {
+    map[String(c.id)] = c;
   });
   return map;
 }
 
-function buildListOrder(lists) {
-  return lists.map((l) => 'list-' + l.id);
-}
-
-function findContainer(id, items) {
-  if (typeof id !== 'string') return null;
-  if (id.startsWith('card-')) {
-    for (const [cid, cids] of Object.entries(items)) {
-      if (cids.includes(id)) return cid;
+function findContainer(cardId, cardStructure) {
+  for (const listId of Object.keys(cardStructure)) {
+    if (cardStructure[listId].includes(String(cardId))) {
+      return listId;
     }
-    return null;
   }
-  if (id.startsWith('list-')) return id;
   return null;
 }
 
 export default function BoardContent({ boardId }) {
-  const cards = useBoardStore((s) => s.cards);
+  // --- LẤY DỮ LIỆU & ACTIONS TỪ ZUSTAND STORE ---
+  const allCards = useBoardStore((s) => s.cards);
   const allLists = useBoardStore((s) => s.lists);
-
-  const lists = useMemo(
-    () => allLists
-      .filter((l) => l.boardId === boardId)
-      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
-    [allLists, boardId],
-  );
   const createCard = useBoardStore((s) => s.createCard);
   const createList = useBoardStore((s) => s.createList);
   const deleteList = useBoardStore((s) => s.deleteList);
+  const moveCard = useBoardStore((s) => s.moveCard);
+  const moveList = useBoardStore((s) => s.moveList);
 
+  // --- LỌC VÀ SẮP XẾP LIST THUỘC BOARD HIỆN TẠI ---
+  const lists = useMemo(
+    () =>
+      allLists
+        .filter((l) => String(l.boardId) === String(boardId))
+        .sort(
+          (a, b) => (a.position ?? a.order ?? 0) - (b.position ?? b.order ?? 0),
+        ),
+    [allLists, boardId],
+  );
+
+  const listIds = useMemo(() => buildListIds(lists), [lists]);
+  const cardMap = useMemo(() => buildCardMap(allCards), [allCards]);
+
+  // --- STATE QUẢN LÝ UI CHỨC NĂNG PHỤ ---
   const [addingFor, setAddingFor] = useState(null);
   const [newTitle, setNewTitle] = useState("");
-  const [activeCard, setActiveCard] = useState(null);
   const [listName, setListName] = useState("");
-  const cardError = newTitle.length > 50 ? 'Tiêu đề card không được quá 50 ký tự' : null
-  const listError = listName.length > 50 ? 'Tên list không được quá 50 ký tự' : null
   const [filterLabel, setFilterLabel] = useState(null);
 
-  // ── Drag state ──
-  // dragState (useState) drives cardItems/listOrder in render → triggers re-render on change
-  // dragStateRef (useRef) allows synchronous reads in event handlers (avoids stale closures)
-  const [dragState, setDragState] = useState(null);
-  const dragStateRef = useRef(null);
-  const dragOverCountRef = useRef(0);
+  const cardError =
+    newTitle.length > 50 ? "Tiêu đề card không được quá 50 ký tự" : null;
+  const listError =
+    listName.length > 50 ? "Tên list không được quá 50 ký tự" : null;
 
-  const cardSchema = z.object({
-    title: z.string().min(1, "Title required").max(200),
-  });
+  // --- STATE & REFS CHIẾN LƯỢC ĐỂ QUẢN LÝ KÉO THẢ (DRAG & DROP) ---
+  const [activeItem, setActiveItem] = useState(null);
+  const [activeType, setActiveType] = useState(null);
+  const [clonedCards, setClonedCards] = useState(null);
 
+  const clonedCardsRef = useRef(null);
+  const activeItemRef = useRef(null);
+  const isDraggingRef = useRef(false);
+
+  // Nếu đang kéo, ưu tiên dùng cấu trúc map tạm thời (clonedCards) để tránh lag giật UI
+  const displayCardsByList = useMemo(() => {
+    if (clonedCards) return clonedCards;
+    return buildCardsByList(allCards);
+  }, [allCards, clonedCards]);
+
+  // Cấu hình Sensors chống kích hoạt nhầm khi click chuột bình thường
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 5 },
     }),
   );
 
+  // --- ACTIONS XỬ LÝ LIÊN QUAN ĐẾN THÊM MỚI CARD/LIST ---
   const openAdd = (listId) => {
     setAddingFor(listId);
     setNewTitle("");
@@ -174,12 +118,8 @@ export default function BoardContent({ boardId }) {
 
   const submitAdd = () => {
     if (cardError) return;
-    const parsed = cardSchema.safeParse({ title: newTitle.trim() });
-    if (!parsed.success) {
-      alert(parsed.error.errors.map((e) => e.message).join("\n"));
-      return;
-    }
-    createCard(addingFor, parsed.data.title);
+    if (!newTitle.trim()) return;
+    createCard(addingFor, newTitle.trim());
     closeAdd();
   };
 
@@ -191,287 +131,260 @@ export default function BoardContent({ boardId }) {
     setListName("");
   };
 
-  const cardsByList = useMemo(() => {
-    const map = new Map();
-    lists.forEach((l) => map.set(l.id, []));
-    cards.forEach((c) => {
-      if (!map.has(c.listId)) return;
-      if (filterLabel && !(c.labels || []).some((l) => l.id === filterLabel)) return;
-      map.get(c.listId).push(c);
-    });
-    return map;
-  }, [lists, cards, filterLabel]);
-
-  const cardItems = useMemo(() => {
-    if (dragState) return dragState.cardItems;
-    return buildCardItems(lists, cardsByList);
-  }, [lists, cardsByList, dragState]);
-
-  const listOrder = useMemo(() => {
-    if (dragState) return dragState.listOrder;
-    return buildListOrder(lists);
-  }, [lists, dragState]);
-
-  const cardMap = useMemo(() => buildCardMap(cards), [cards]);
-
-  const depsRef = useRef({ lists, cardsByList });
-  useEffect(() => {
-    depsRef.current = { lists, cardsByList };
-  });
-
-  // ── Handlers (tất cả đều STABLE với []) ──
-  const handleDragStart = useCallback((event) => {
-    const { active } = event;
-    const { lists, cardsByList } = depsRef.current;
-    const state = {
-      cardItems: buildCardItems(lists, cardsByList),
-      listOrder: buildListOrder(lists),
-      listChanged: false,
-    };
-    setDragState(state);
-    dragStateRef.current = state;
-    dragOverCountRef.current = 0;
-
-    if (active.data.current?.type === 'card') {
-      setActiveCard(active.data.current.card);
-    }
+  const handleDragCancel = useCallback(() => {
+    isDraggingRef.current = false;
+    setActiveItem(null);
+    setActiveType(null);
+    activeItemRef.current = null;
+    setClonedCards(null);
+    clonedCardsRef.current = null;
   }, []);
 
+  // ==========================================
+  // 1. HANDLE DRAG START (Bắt đầu kéo)
+  // ==========================================
+  const handleDragStart = useCallback(
+    (event) => {
+      const { active } = event;
+      isDraggingRef.current = true;
+
+      const activeId = String(active.id);
+      let type = active.data.current?.type;
+
+      // Cơ chế phòng vệ tự động đoán type nếu OpenCode truyền thiếu data
+      if (!type) {
+        const currentStoreCards = useBoardStore.getState().cards;
+        const isCard = currentStoreCards.some((c) => String(c.id) === activeId);
+        type = isCard ? "card" : "list";
+      }
+
+      if (type === "card") {
+        const snapshot = buildCardsByList(useBoardStore.getState().cards);
+        setClonedCards(snapshot);
+        clonedCardsRef.current = snapshot;
+
+        const cardData = cardMap[activeId] || active.data.current?.card;
+        setActiveItem(cardData);
+        setActiveType("card");
+        activeItemRef.current = { type: "card", data: cardData };
+      } else if (type === "list") {
+        const listData =
+          lists.find((l) => String(l.id) === activeId) ||
+          active.data.current?.list;
+        setActiveItem(listData);
+        setActiveType("list");
+        activeItemRef.current = { type: "list", data: listData };
+      }
+    },
+    [cardMap, lists],
+  );
+
+  // ==========================================
+  // 2. HANDLE DRAG OVER (Kéo gai qua các vùng - Xử lý xuyên cột)
+  // ==========================================
   const handleDragOver = useCallback((event) => {
     const { active, over } = event;
-    if (!over || !active) return;
+    if (!active || !over) return;
 
     const activeId = String(active.id);
     const overId = String(over.id);
     if (activeId === overId) return;
 
-    const current = dragStateRef.current;
-    if (!current) return;
+    const currentClone = clonedCardsRef.current;
+    if (!currentClone) return; // Nếu đang kéo thả List, bỏ qua xử lý hoán đổi mảng của Card
 
-    const cardItems = current.cardItems;
-    const count = ++dragOverCountRef.current;
+    const activeListId = findContainer(activeId, currentClone);
+    if (!activeListId) return;
 
-    if (active.data.current?.type === 'card') {
-      const activeContainer = findContainer(activeId, cardItems);
-      if (!activeContainer) return;
+    let overListId = null;
 
-      let overContainer;
-      let overIndex;
+    // Phân tích xem điểm chuột đang đè lên (overId) thuộc về Card hay List rỗng
+    if (findContainer(overId, currentClone)) {
+      overListId = findContainer(overId, currentClone);
+    } else if (currentClone[overId]) {
+      overListId = overId;
+    }
 
-      if (overId.startsWith('card-')) {
-        overContainer = findContainer(overId, cardItems);
-        if (!overContainer) return;
-        const overCardIds = cardItems[overContainer] || [];
-        overIndex = overCardIds.indexOf(overId);
-        if (overIndex < 0) overIndex = overCardIds.length;
-      } else if (overId.startsWith('list-')) {
-        overContainer = overId;
-        overIndex = (cardItems[overId] || []).length;
-      } else {
+    if (!overListId || activeListId === overListId) return;
+
+    // Thực hiện tính toán hoán đổi vị trí Card xuyên cột ảo trên State local
+    const sourceCards = currentClone[activeListId].filter(
+      (id) => id !== activeId,
+    );
+    const targetCards = [...(currentClone[overListId] || [])];
+
+    let overIndex = targetCards.indexOf(overId);
+    if (overIndex < 0) {
+      overIndex = targetCards.length;
+    }
+
+    const nextClone = {
+      ...currentClone,
+      [activeListId]: sourceCards,
+      [overListId]: [
+        ...targetCards.slice(0, overIndex),
+        activeId,
+        ...targetCards.slice(overIndex),
+      ],
+    };
+
+    setClonedCards(nextClone);
+    clonedCardsRef.current = nextClone;
+  }, []);
+
+  // ==========================================
+  // 3. HANDLE DRAG END (Nhả chuột - Chốt hạ và đẩy về Zustand)
+  // ==========================================
+  const handleDragEnd = useCallback(
+    (event) => {
+      const { active, over } = event;
+      isDraggingRef.current = false;
+
+      if (!active || !over) {
+        handleDragCancel();
         return;
       }
 
-      console.log(
-        `[dragOver #${count}] card`,
-        { activeId, overId, activeContainer, overContainer, overIndex },
-        `same=${activeContainer === overContainer}`,
-      );
-
-      // Chỉ xử lý cross-container trong dragOver (same-container để DndKit handle layout)
-      if (activeContainer === overContainer) return;
-
-      const currentOverArr = cardItems[overContainer] || [];
-      let nextCardItems;
-
-      if (currentOverArr.includes(activeId)) {
-        const oldIndex = currentOverArr.indexOf(activeId);
-        let newIndex = overIndex;
-        if (oldIndex < newIndex) newIndex = Math.min(newIndex, currentOverArr.length);
-        console.log(`[dragOver #${count}] cross same-target reorder`, { activeId, overId, oldIndex, newIndex });
-        if (oldIndex === newIndex) return;
-
-        nextCardItems = {
-          ...cardItems,
-          [overContainer]: arrayMove([...currentOverArr], oldIndex, newIndex),
-        };
-      } else {
-        const activeCardIds = cardItems[activeContainer].filter((id) => id !== activeId);
-        const overCardIds = [...currentOverArr];
-        const newIndex = Math.min(overIndex, overCardIds.length);
-        console.log(`[dragOver #${count}] cross-container fresh`, { activeId, overId, activeContainer, overContainer, newIndex });
-        overCardIds.splice(newIndex, 0, activeId);
-
-        nextCardItems = {
-          ...cardItems,
-          [activeContainer]: activeCardIds,
-          [overContainer]: overCardIds,
-        };
-      }
-
-      if (nextCardItems) {
-        const next = { ...current, cardItems: nextCardItems };
-        dragStateRef.current = next;
-      }
-    }
-
-    if (active.data.current?.type === 'list') {
-      if (!overId.startsWith('list-')) return;
-      const lo = current.listOrder;
-      const oldIndex = lo.indexOf(activeId);
-      const newIndex = lo.indexOf(overId);
-      if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return;
-
-      console.log(
-        `[dragOver #${count}] list`,
-        { activeId, overId, oldIndex, newIndex },
-      );
-
-      const next = {
-        ...current,
-        listOrder: arrayMove([...lo], oldIndex, newIndex),
-        listChanged: true,
-      };
-      setDragState(next);
-      dragStateRef.current = next;
-    }
-  }, []);
-
-  const handleDragEnd = useCallback((event) => {
-    const { active, over } = event;
-
-    if (active && over) {
-      const store = useBoardStore.getState();
       const activeId = String(active.id);
+      const overId = String(over.id);
+      const store = useBoardStore.getState();
 
-      if (activeId.startsWith('card-')) {
-        const activeCard =
-          active.data.current?.card ??
-          store.cards.find((c) => c.id === Number(activeId.replace('card-', '')));
-        if (!activeCard) return;
-        const activeCardId = activeCard.id;
-        const sourceListId = activeCard.listId;
-        const overId = String(over.id);
+      // Xác định đối tượng vừa kết thúc kéo dựa trên sự tồn tại của mảng clone
+      const isCardDrag = clonedCardsRef.current !== null;
 
-        const { lists, cardsByList } = depsRef.current;
-        const baseCardItems = buildCardItems(lists, cardsByList);
-
-        let targetListId = sourceListId;
-        let targetIndex;
-
-        if (overId.startsWith('card-')) {
-          const overContainer = findContainer(overId, baseCardItems);
-          if (overContainer) {
-            targetListId = Number(overContainer.replace('list-', ''));
-            const ids = baseCardItems[overContainer] || [];
-            targetIndex = ids.indexOf(overId);
-            if (targetIndex < 0) targetIndex = ids.length;
-          } else {
-            targetIndex = 0;
-          }
-        } else if (overId.startsWith('list-')) {
-          targetListId = Number(overId.replace('list-', ''));
-          targetIndex = (baseCardItems[overId] || []).length;
-        } else {
-          targetIndex = 0;
+      if (isCardDrag) {
+        const activeCard = store.cards.find((c) => String(c.id) === activeId);
+        if (!activeCard) {
+          handleDragCancel();
+          return;
         }
 
-        store.moveCard(activeCardId, targetListId, targetIndex);
-      } else if (activeId.startsWith('list-')) {
-        const overId = String(over.id);
-        if (overId.startsWith('list-')) {
-          const listId = active.data.current?.list?.id ?? Number(activeId.replace('list-', ''));
-          const targetListId = Number(overId.replace('list-', ''));
-          store.reorderList(listId, targetListId);
+        const finalClone = clonedCardsRef.current;
+        const sourceListId = String(activeCard.listId);
+        let targetListId = findContainer(activeId, finalClone) || sourceListId;
+        let targetIndex = 0;
+
+        if (sourceListId === targetListId) {
+          // Trường hợp 1: Kéo thả nội bộ trong cùng một cột
+          const listCardIds = store.cards
+            .filter((c) => String(c.listId) === targetListId)
+            .map((c) => String(c.id));
+
+          const oldIdx = listCardIds.indexOf(activeId);
+          const newIdx = listCardIds.indexOf(overId);
+
+          if (oldIdx !== -1 && newIdx !== -1) {
+            const reordered = arrayMove(listCardIds, oldIdx, newIdx);
+            targetIndex = reordered.indexOf(activeId);
+          }
+        } else if (finalClone) {
+          // Trường hợp 2: Kéo sang cột khác (Lấy index sau cùng đã tính ở DragOver)
+          const targetCardIds = finalClone[targetListId] || [];
+          targetIndex = targetCardIds.indexOf(activeId);
+          if (targetIndex < 0) targetIndex = targetCardIds.length;
+        }
+
+        // Kỹ thuật tự động ép kiểu dữ liệu nguyên bản để bọc khớp với API Backend (Number / String)
+        const parsedCardId = isNaN(Number(activeId))
+          ? activeId
+          : Number(activeId);
+        const parsedListId = isNaN(Number(targetListId))
+          ? targetListId
+          : Number(targetListId);
+
+        // Chốt hạ đẩy dữ liệu về Zustand Store làm sạch giao diện và gọi API đồng bộ
+        store.moveCard(parsedCardId, parsedListId, targetIndex);
+      } else {
+        // Trường hợp 3: Kéo thả hoán đổi vị trí của Cột (List)
+        if (activeId !== overId) {
+          store.moveList(activeId, overId);
         }
       }
-    }
 
-    setActiveCard(null);
-    setDragState(null);
-    dragStateRef.current = null;
-  }, []);
-
-  const handleDragCancel = useCallback(() => {
-    setActiveCard(null);
-    setDragState(null);
-    dragStateRef.current = null;
-  }, []);
+      // Dọn dẹp sạch toàn bộ các state phụ trợ tạm thời sau khi xử lý kết thúc thành công
+      setActiveItem(null);
+      setActiveType(null);
+      activeItemRef.current = null;
+      setClonedCards(null);
+      clonedCardsRef.current = null;
+    },
+    [handleDragCancel, moveCard, moveList],
+  );
 
   return (
     <DndContext
       sensors={sensors}
       onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
-      onDragOver={handleDragOver}
     >
       <div className="board-columns">
         {filterLabel && (
           <div className="filter-bar">
             <span>Filtering by label</span>
-            <button className="btn btn--sm btn--ghost" onClick={() => setFilterLabel(null)}>Clear</button>
+            <button
+              className="btn btn--sm btn--ghost"
+              onClick={() => setFilterLabel(null)}
+            >
+              Clear
+            </button>
           </div>
         )}
 
-        <SortableContext items={listOrder} strategy={horizontalListSortingStrategy}>
-          {listOrder.map((listId) => {
-            const list = lists.find((l) => 'list-' + l.id === listId);
+        {/* Khung xử lý kéo thả ngang cho toàn bộ List Column */}
+        <SortableContext
+          items={listIds}
+          strategy={horizontalListSortingStrategy}
+        >
+          {listIds.map((listId) => {
+            const list = lists.find((l) => String(l.id) === listId);
             if (!list) return null;
-            const cardIds = cardItems[listId] ?? EMPTY_ITEMS;
+
+            const cardIds = displayCardsByList[listId] ?? EMPTY_ITEMS;
+
             return (
-              <ListColumn key={listId} list={list} onDelete={deleteList}>
-                <SortableContext items={cardIds} strategy={verticalListSortingStrategy}>
-                  {cardIds.map((cardId) => {
-                    const card = cardMap[cardId];
-                    if (!card) return null;
-                    return (
-                      <Card
-                        key={cardId}
-                        card={card}
-                        onLabelClick={(labelId) => setFilterLabel(labelId === filterLabel ? null : labelId)}
-                        activeLabel={filterLabel}
-                      />
-                    );
-                  })}
-                </SortableContext>
-                <div className="add-card-area">
-                  {addingFor === list.id ? (
-                    <Input size="sm"
-                      autoFocus
-                      className="add-card-input"
-                      value={newTitle}
-                      onChange={(e) => setNewTitle(e.target.value)}
-                      onBlur={closeAdd}
-                      error={cardError}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") submitAdd();
-                        if (e.key === "Escape") closeAdd();
-                      }}
-                      placeholder="Enter card title and press Enter"
-                    />
-                  ) : (
-                    <button className="add-card-btn" onClick={() => openAdd(list.id)}>
-                      + Add a card
-                    </button>
-                  )}
-                </div>
-              </ListColumn>
+              <ListColumn
+                key={listId}
+                list={list}
+                cardIds={cardIds}
+                cardMap={cardMap}
+                onDelete={deleteList}
+                addingFor={addingFor}
+                openAdd={openAdd}
+                closeAdd={closeAdd}
+                submitAdd={submitAdd}
+                newTitle={newTitle}
+                setNewTitle={setNewTitle}
+                cardError={cardError}
+                filterLabel={filterLabel}
+                setFilterLabel={setFilterLabel}
+              />
             );
           })}
         </SortableContext>
 
+        {/* Form thêm mới một cột */}
         <form className="add-list-form" onSubmit={handleAddList}>
-          <Input size="sm"
+          <input
+            className="add-list-input"
             placeholder="+ Add list"
             value={listName}
             onChange={(e) => setListName(e.target.value)}
-            error={listError}
           />
         </form>
 
+        {/* Drag Overlay: Tạo bóng ảo mượt mà khi di chuyển vật thể */}
         <DragOverlay>
-          {activeCard ? (
-            <div className="card drag-overlay">{activeCard.title}</div>
+          {activeType === "card" && activeItem ? (
+            <div className="card drag-overlay">{activeItem.title}</div>
+          ) : null}
+          {activeType === "list" && activeItem ? (
+            <div className="board-column-wrapper drag-overlay">
+              <div className="board-column">
+                <h3>{activeItem.name}</h3>
+              </div>
+            </div>
           ) : null}
         </DragOverlay>
       </div>

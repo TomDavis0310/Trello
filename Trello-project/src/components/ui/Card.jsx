@@ -1,5 +1,6 @@
   import { useState } from "react";
   import { useSortable } from "@dnd-kit/sortable";
+  import { CSS } from "@dnd-kit/utilities";
   import useBoardStore from "../../store/boardStore";
   import ConfirmModal from "../common/ConfirmModal";
   import { Input } from "./Input";
@@ -71,7 +72,7 @@
     });
 
     const style = {
-      transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
+      transform: CSS.Transform.toString(transform),
       transition,
     };
 

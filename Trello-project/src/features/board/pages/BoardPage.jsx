@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import BoardContent from "../components/BoardContent";
 import { Button } from "../../../components/ui/Button";
@@ -13,20 +13,34 @@ import useBoardStore from "../../../store/boardStore";
 export default function BoardPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const boardId = Number(id);
+
+  // Mẹo: Giữ nguyên id dạng gốc (String) hoặc linh hoạt ép kiểu để tránh lỗi so sánh nghiêm ngặt (===) trong Store
+  const boardId = id;
+
   const boards = useBoardStore((s) => s.boards);
   const updateBoard = useBoardStore((s) => s.updateBoard);
+  const setCurrentBoard = useBoardStore((s) => s.setCurrentBoard);
 
-  const board = boards.find((b) => b.id === boardId);
+  // So sánh linh hoạt bằng == để nhận diện đúng cả ID dạng chuỗi lẫn dạng số từ API
+  const board = boards.find((b) => b.id == boardId);
 
   const [editingName, setEditingName] = useState(false);
   const [editTitle, setEditTitle] = useState("");
-  const titleError = editTitle.length > 50 ? 'Tiêu đề không được quá 50 ký tự' : null
+  const titleError =
+    editTitle.length > 50 ? "Tiêu đề không được quá 50 ký tự" : null;
+
+  // Cập nhật currentBoard vào Store bất cứ khi nào đổi trang Board khác nhau
+  useEffect(() => {
+    if (board) {
+      setCurrentBoard(board);
+    }
+  }, [board, setCurrentBoard]);
 
   const handleRename = () => {
     if (titleError) return;
     if (editTitle.trim() && editTitle !== board?.name) {
-      updateBoard(boardId, { name: editTitle.trim() });
+      // Đảm bảo truyền đúng định dạng ID mà board đang sở hữu
+      updateBoard(board.id, { name: editTitle.trim() });
     }
     setEditingName(false);
   };
@@ -34,12 +48,12 @@ export default function BoardPage() {
   if (!board) {
     return (
       <div className="board-page">
-        <p>
-          Board not found.{" "}
+        <div className="board-not-found">
+          <p>Board not found.</p>
           <Button variant="ghost" onClick={() => navigate("/")}>
             Go back
           </Button>
-        </p>
+        </div>
       </div>
     );
   }
@@ -50,7 +64,8 @@ export default function BoardPage() {
         <div className="board-header-row">
           {/* Inline edit title: click vào h1 để chuyển sang input */}
           {editingName ? (
-            <Input size="lg"
+            <Input
+              size="lg"
               autoFocus
               className="board-title-input"
               value={editTitle}
@@ -80,8 +95,11 @@ export default function BoardPage() {
           </Button>
         </div>
       </header>
-      {/* Nội dung board: các list + drag & drop */}
-      <BoardContent boardId={boardId} />
+
+      {/* Nội dung board: Gửi board.id chuẩn từ object đã tìm thấy để component con render chính xác */}
+      <BoardContent boardId={board.id} />
+
+      {/* Modal hiển thị chi tiết thẻ */}
       <CardDetailModal />
     </div>
   );

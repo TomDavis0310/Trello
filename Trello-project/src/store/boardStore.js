@@ -109,17 +109,62 @@ const useBoardStore = create(
         }
       },
 
-      reorderList: async (listId, targetListId) => {
+      moveList: async (activeId, overId) => {
+        const { lists } = get();
+        const prevLists = [...lists];
+
+        const activeNum = Number(activeId);
+        const overNum = Number(overId);
+
+        const movedList = lists.find((l) => Number(l.id) === activeNum);
+        if (!movedList) return;
+        const bid = Number(movedList.boardId);
+
+        const boardLists = lists
+          .filter((l) => Number(l.boardId) === bid)
+          .sort(
+            (a, b) =>
+              (a.position ?? a.order ?? 0) - (b.position ?? b.order ?? 0),
+          );
+        const otherLists = lists.filter((l) => Number(l.boardId) !== bid);
+
+        const oldIndex = boardLists.findIndex(
+          (l) => Number(l.id) === activeNum,
+        );
+        const newIndex = boardLists.findIndex(
+          (l) => Number(l.id) === overNum,
+        );
+        if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex)
+          return;
+
+        const reordered = [...boardLists];
+        const [removed] = reordered.splice(oldIndex, 1);
+        reordered.splice(newIndex, 0, removed);
+
+        const updated = reordered.map((list, i) => ({
+          ...list,
+          position: i,
+          order: i,
+        }));
+
+        set(
+          { lists: [...otherLists, ...updated] },
+          false,
+          "moveList/optimistic",
+        );
+
         try {
-          const lists = await api.reorderList(listId, targetListId);
-          if (Array.isArray(lists)) {
-            set({ lists }, false, "reorderList");
-          } else {
-            const { lists: currentLists } = get();
-            set({ lists: [...currentLists] }, false, "reorderList");
+          const response = await api.reorderList(activeNum, overNum);
+          if (Array.isArray(response)) {
+            set({ lists: response }, false, "moveList/success");
           }
         } catch (err) {
-          set({ error: err.message }, false, "reorderList/error");
+          console.error("moveList error:", err);
+          set(
+            { lists: prevLists, error: err.message },
+            false,
+            "moveList/rollback",
+          );
         }
       },
 
@@ -203,29 +248,40 @@ const useBoardStore = create(
       },
 
       moveCard: async (cardId, targetListId, targetIndex) => {
+        const prevCards = get().cards;
+        const cid = Number(cardId);
+        const tlid = Number(targetListId);
+
+        const card = prevCards.find((c) => Number(c.id) === cid);
+        if (!card) return;
+
+        const updatedCard = { ...card, listId: tlid };
+        const otherCards = prevCards.filter((c) => Number(c.id) !== cid);
+
+        const targetListCards = otherCards
+          .filter((c) => Number(c.listId) === tlid)
+          .reduce((acc, c) => { acc.push(c); return acc; }, []);
+        targetListCards.splice(targetIndex, 0, updatedCard);
+
+        const restCards = otherCards.filter(
+          (c) => Number(c.listId) !== tlid,
+        );
+
+        set(
+          { cards: [...restCards, ...targetListCards] },
+          false,
+          "moveCard/optimistic",
+        );
+
         try {
-          await api.moveCard(cardId, targetListId);
-          set(
-            (state) => {
-              const card = state.cards.find((c) => c.id === cardId);
-              if (!card) return state;
-              const updatedCard = { ...card, listId: targetListId };
-              const otherCards = state.cards.filter((c) => c.id !== cardId);
-              const targetCards = otherCards.filter(
-                (c) => c.listId === targetListId,
-              );
-              targetCards.splice(targetIndex, 0, updatedCard);
-              const finalCards = [
-                ...otherCards.filter((c) => c.listId !== targetListId),
-                ...targetCards,
-              ];
-              return { cards: finalCards };
-            },
-            false,
-            "moveCard",
-          );
+          await api.moveCard(cid, tlid);
         } catch (err) {
-          set({ error: err.message }, false, "moveCard/error");
+          console.error("moveCard error:", err);
+          set(
+            { cards: prevCards, error: err.message },
+            false,
+            "moveCard/rollback",
+          );
         }
       },
 
@@ -275,11 +331,7 @@ const useBoardStore = create(
 
       addLabel: async (cardId, label) => {
         try {
-          const newLabel = await api.addLabel(
-            cardId,
-            label.color,
-            label.text,
-          );
+          const newLabel = await api.addLabel(cardId, label.color, label.text);
           set(
             (state) => ({
               cards: state.cards.map((c) =>
