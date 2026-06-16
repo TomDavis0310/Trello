@@ -35,6 +35,7 @@ export default function ListColumn({
   } = useSortable({
     id: String(list.id),
     data: { type: "list", list },
+    handle: true,
   });
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
