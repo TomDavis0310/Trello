@@ -56,17 +56,13 @@ export function removeComment(cardId, commentId) {
 export function addLabel(cardId, label) {
   const card = db.getCardById(cardId);
   if (!card) throw Object.assign(new Error("Card not found"), { status: 404 });
-  const newLabel = { ...label, id: db.genId() };
-  db.updateCard(cardId, { labels: [...(card.labels || []), newLabel] });
-  return newLabel;
+  return db.addLabel(cardId, label);
 }
 
 export function removeLabel(cardId, labelId) {
-  const card = db.getCardById(cardId);
-  if (!card) throw Object.assign(new Error("Card not found"), { status: 404 });
-  db.updateCard(cardId, {
-    labels: (card.labels || []).filter((l) => l.id !== labelId),
-  });
+  const ok = db.removeLabel(cardId, labelId);
+  if (!ok)
+    throw Object.assign(new Error("Card or label not found"), { status: 404 });
   return { message: "Label removed" };
 }
 

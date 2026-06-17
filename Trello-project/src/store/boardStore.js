@@ -78,13 +78,13 @@ const useBoardStore = create(
         try {
           await api.deleteBoard(id);
           const { boards, lists, cards, currentBoard } = get();
-          const remainingLists = lists.filter((l) => l.boardId !== id);
-          const remainingListIds = remainingLists.map((l) => l.id);
+          const remainingLists = lists.filter((l) => Number(l.boardId) !== Number(id));
+          const remainingListIds = new Set(remainingLists.map((l) => l.id));
           set(
             {
               boards: boards.filter((b) => b.id !== id),
               lists: remainingLists,
-              cards: cards.filter((c) => remainingListIds.includes(c.listId)),
+              cards: cards.filter((c) => remainingListIds.has(c.listId)),
               currentBoard: currentBoard?.id === id ? null : currentBoard,
             },
             false,
@@ -154,10 +154,7 @@ const useBoardStore = create(
         );
 
         try {
-          const response = await api.reorderList(activeNum, overNum);
-          if (Array.isArray(response)) {
-            set({ lists: response }, false, "moveList/success");
-          }
+          await api.reorderList(activeNum, overNum);
         } catch (err) {
           console.error("moveList error:", err);
           set(

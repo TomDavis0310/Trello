@@ -1,246 +1,349 @@
-let nextId = 1;
-export const genId = () => nextId++;
+import db from "./db.js";
+
+export const genId = () => Date.now() + Math.floor(Math.random() * 1000);
+
+// ============= HELPERS =============
+
+function toCamel(row) {
+  if (!row) return null;
+  const out = {};
+  for (const key of Object.keys(row)) {
+    out[key.replace(/_([a-z])/g, (_, c) => c.toUpperCase())] = row[key];
+  }
+  return out;
+}
 
 // ============= USERS & SESSIONS =============
 
-const users = [];
-const sessions = {};
-
 export function createUser(email, password, name) {
-  const user = { id: genId(), email, password, name: name || email.split("@")[0] };
-  users.push(user);
+  const info = db
+    .prepare("INSERT INTO users (email, password, name) VALUES (?, ?, ?)")
+    .run(email, password, name || email.split("@")[0]);
+
+  const user = db
+    .prepare("SELECT * FROM users WHERE id = ?")
+    .get(Number(info.lastInsertRowid));
+
   const { password: _, ...safe } = user;
   return safe;
 }
 
 export function findUserByEmail(email) {
-  return users.find((u) => u.email === email) || null;
+  const row = db.prepare("SELECT * FROM users WHERE email = ?").get(email);
+  return toCamel(row);
 }
 
 export function findUserById(id) {
-  return users.find((u) => u.id === id) || null;
+  const row = db.prepare("SELECT * FROM users WHERE id = ?").get(id);
+  return toCamel(row);
 }
 
 export function createSession(userId) {
-  const token = "tok_" + Date.now() + "_" + Math.random().toString(36).slice(2);
-  sessions[token] = userId;
+  const token =
+    "tok_" + Date.now() + "_" + Math.random().toString(36).slice(2);
+  db.prepare("INSERT INTO sessions (token, user_id) VALUES (?, ?)").run(
+    token,
+    userId,
+  );
   return token;
 }
 
 export function deleteSession(token) {
-  delete sessions[token];
+  db.prepare("DELETE FROM sessions WHERE token = ?").run(token);
 }
 
 export function getUserByToken(token) {
-  const userId = sessions[token];
-  if (!userId) return null;
-  return findUserById(userId);
+  const row = db
+    .prepare(
+      `SELECT users.* FROM users
+       JOIN sessions ON sessions.user_id = users.id
+       WHERE sessions.token = ?`,
+    )
+    .get(token);
+  return toCamel(row);
 }
-
-// Seed default demo user
-createUser("demo@trello.com", "123456", "Demo");
 
 // ============= BOARDS =============
 
-const boards = [];
-
 export function createBoard(userId, name) {
-  const board = { id: genId(), userId, name, createdAt: Date.now() };
-  boards.push(board);
-  ["Todo", "In Progress", "Review", "Done"].forEach((n, i) => {
-    const list = { id: genId(), boardId: board.id, name: n, order: i };
-    lists.push(list);
+  const seed = db.transaction(() => {
+    const boardInfo = db
+      .prepare("INSERT INTO boards (user_id, name) VALUES (?, ?)")
+      .run(userId, name);
+    const boardId = Number(boardInfo.lastInsertRowid);
+
+    const insertList = db.prepare(
+      `INSERT INTO lists (board_id, name, "order") VALUES (?, ?, ?)`,
+    );
+    ["Todo", "In Progress", "Review", "Done"].forEach((n, i) => {
+      insertList.run(boardId, n, i);
+    });
+
+    return boardId;
   });
-  return board;
+
+  const boardId = seed();
+  const board = db.prepare("SELECT * FROM boards WHERE id = ?").get(boardId);
+  return toCamel(board);
 }
 
 export function getBoardsByUser(userId) {
-  return boards.filter((b) => b.userId === userId);
+  const rows = db.prepare("SELECT * FROM boards WHERE user_id = ?").all(userId);
+  return rows.map(toCamel);
 }
 
 export function getBoardById(id) {
-  return boards.find((b) => b.id === id) || null;
+  const row = db.prepare("SELECT * FROM boards WHERE id = ?").get(id);
+  return toCamel(row);
 }
 
 export function updateBoard(id, data) {
-  const idx = boards.findIndex((b) => b.id === id);
-  if (idx === -1) return null;
-  boards[idx] = { ...boards[idx], ...data };
-  return boards[idx];
+  const result = db
+    .prepare("UPDATE boards SET name = ? WHERE id = ?")
+    .run(data.name, id);
+  if (result.changes === 0) return null;
+  return toCamel(
+    db.prepare("SELECT * FROM boards WHERE id = ?").get(id),
+  );
 }
 
 export function deleteBoard(id) {
-  const idx = boards.findIndex((b) => b.id === id);
-  if (idx === -1) return false;
-  boards.splice(idx, 1);
-  const boardLists = lists.filter((l) => l.boardId === id);
-  boardLists.forEach((l) => deleteList(l.id));
-  return true;
+  const result = db.prepare("DELETE FROM boards WHERE id = ?").run(id);
+  return result.changes > 0;
 }
 
 export function getListsByBoard(boardId) {
-  return lists.filter((l) => l.boardId === boardId);
+  const rows = db
+    .prepare(`SELECT * FROM lists WHERE board_id = ? ORDER BY "order" ASC`)
+    .all(boardId);
+  return rows.map(toCamel);
 }
 
 export function getCardsByBoard(boardId) {
-  const boardLists = lists.filter((l) => l.boardId === boardId);
-  const listIds = boardLists.map((l) => l.id);
-  return cards.filter((c) => listIds.includes(c.listId));
+  const rows = db
+    .prepare(
+      `SELECT cards.* FROM cards
+       JOIN lists ON lists.id = cards.list_id
+       WHERE lists.board_id = ?`,
+    )
+    .all(boardId);
+  return rows.map(toCamel);
 }
 
 export function getUserData(userId) {
-  const userBoards = getBoardsByUser(userId);
-  const boardIds = userBoards.map((b) => b.id);
-  const userLists = lists.filter((l) => boardIds.includes(l.boardId));
-  const listIds = userLists.map((l) => l.id);
-  const userCards = cards.filter((c) => listIds.includes(c.listId));
-  return { boards: userBoards, lists: userLists, cards: userCards };
+  const boards = getBoardsByUser(userId);
+  if (boards.length === 0) return { boards: [], lists: [], cards: [] };
+
+  const boardIds = boards.map((b) => b.id);
+  const ph = boardIds.map(() => "?").join(",");
+
+  const lists = db
+    .prepare(
+      `SELECT * FROM lists WHERE board_id IN (${ph}) ORDER BY "order" ASC`,
+    )
+    .all(...boardIds)
+    .map(toCamel);
+
+  const cards = db
+    .prepare(
+      `SELECT cards.* FROM cards
+       JOIN lists ON lists.id = cards.list_id
+       WHERE lists.board_id IN (${ph})`,
+    )
+    .all(...boardIds)
+    .map(enrichCard);
+
+  return { boards, lists, cards };
 }
 
-// ============= LIST =============
-
-const lists = [];
+// ============= LISTS =============
 
 export function getAllLists() {
-  return [...lists];
+  const rows = db
+    .prepare(`SELECT * FROM lists ORDER BY board_id, "order" ASC`)
+    .all();
+  return rows.map(toCamel);
 }
 
 export function getListById(id) {
-  return lists.find((l) => l.id === id) || null;
+  return toCamel(db.prepare("SELECT * FROM lists WHERE id = ?").get(id));
 }
 
 export function createList(boardId, name) {
-  const boardLists = lists.filter((l) => l.boardId === boardId);
-  const list = { id: genId(), boardId, name, order: boardLists.length };
-  lists.push(list);
-  return list;
+  const { count } = db
+    .prepare("SELECT COUNT(*) AS count FROM lists WHERE board_id = ?")
+    .get(boardId);
+
+  const info = db
+    .prepare(`INSERT INTO lists (board_id, name, "order") VALUES (?, ?, ?)`)
+    .run(boardId, name, count);
+
+  return toCamel(
+    db.prepare("SELECT * FROM lists WHERE id = ?").get(Number(info.lastInsertRowid)),
+  );
 }
 
 export function updateList(id, data) {
-  const idx = lists.findIndex((l) => l.id === id);
-  if (idx === -1) return null;
-  lists[idx] = { ...lists[idx], ...data };
-  return lists[idx];
+  if (data.name === undefined) return getListById(id);
+
+  const result = db
+    .prepare("UPDATE lists SET name = ? WHERE id = ?")
+    .run(data.name, id);
+
+  if (result.changes === 0) return null;
+  return toCamel(db.prepare("SELECT * FROM lists WHERE id = ?").get(id));
 }
 
 export function deleteList(id) {
-  const idx = lists.findIndex((l) => l.id === id);
-  if (idx === -1) return false;
-  lists.splice(idx, 1);
-  for (let i = cards.length - 1; i >= 0; i--) {
-    if (cards[i].listId === id) cards.splice(i, 1);
-  }
-  return true;
+  const result = db.prepare("DELETE FROM lists WHERE id = ?").run(id);
+  return result.changes > 0;
 }
 
 export function reorderList(listId, targetListId) {
-  const src = lists.find((l) => l.id === listId);
-  const tgt = lists.find((l) => l.id === targetListId);
-  if (!src || !tgt) return false;
+  const src = db.prepare("SELECT * FROM lists WHERE id = ?").get(listId);
+  const tgt = db.prepare("SELECT * FROM lists WHERE id = ?").get(targetListId);
+  if (!src || !tgt || src.board_id !== tgt.board_id) return false;
 
-  const sorted = [...lists].sort((a, b) => a.order - b.order);
-  const si = sorted.findIndex((l) => l.id === listId);
-  const ti = sorted.findIndex((l) => l.id === targetListId);
+  const rows = db
+    .prepare(`SELECT * FROM lists WHERE board_id = ? ORDER BY "order" ASC`)
+    .all(src.board_id);
+
+  const si = rows.findIndex((r) => r.id === listId);
+  const ti = rows.findIndex((r) => r.id === targetListId);
   if (si === -1 || ti === -1) return false;
 
-  const [moved] = sorted.splice(si, 1);
-  sorted.splice(ti, 0, moved);
-  sorted.forEach((l, i) => {
-    const db = lists.findIndex((x) => x.id === l.id);
-    if (db !== -1) lists[db] = { ...lists[db], order: i };
+  const [moved] = rows.splice(si, 1);
+  rows.splice(ti, 0, moved);
+
+  const update = db.prepare(`UPDATE lists SET "order" = ? WHERE id = ?`);
+  const reorder = db.transaction(() => {
+    rows.forEach((r, i) => update.run(i, r.id));
   });
+  reorder();
+
   return true;
 }
 
-// ============= CARD =============
+// ============= CARDS =============
 
-const cards = [];
+function enrichCard(row) {
+  if (!row) return null;
+  const card = toCamel(row);
 
-export function getCardById(id) {
-  return cards.find((c) => c.id === id) || null;
-}
+  card.comments = db
+    .prepare("SELECT * FROM comments WHERE card_id = ? ORDER BY created_at ASC")
+    .all(card.id)
+    .map(toCamel);
 
-export function getCardsByList(listId) {
-  return cards.filter((c) => c.listId === listId);
-}
+  card.labels = db
+    .prepare("SELECT * FROM labels WHERE card_id = ?")
+    .all(card.id)
+    .map(toCamel);
 
-export function createCard(listId, title) {
-  const card = {
-    id: genId(),
-    listId,
-    title,
-    description: "",
-    createdAt: Date.now(),
-    comments: [],
-    labels: [],
-    dueDate: null,
-  };
-  cards.push(card);
   return card;
 }
 
+export function getCardById(id) {
+  return enrichCard(db.prepare("SELECT * FROM cards WHERE id = ?").get(id));
+}
+
+export function getCardsByList(listId) {
+  const rows = db.prepare("SELECT * FROM cards WHERE list_id = ?").all(listId);
+  return rows.map(enrichCard);
+}
+
+export function createCard(listId, title) {
+  const info = db
+    .prepare("INSERT INTO cards (list_id, title, description) VALUES (?, ?, '')")
+    .run(listId, title);
+
+  return getCardById(Number(info.lastInsertRowid));
+}
+
 export function updateCard(id, data) {
-  const idx = cards.findIndex((c) => c.id === id);
-  if (idx === -1) return null;
-  cards[idx] = { ...cards[idx], ...data };
-  return cards[idx];
+  const allowed = {
+    title: "title",
+    description: "description",
+    dueDate: "due_date",
+  };
+  const sets = [];
+  const vals = [];
+
+  for (const [key, col] of Object.entries(allowed)) {
+    if (data[key] !== undefined) {
+      sets.push(`"${col}" = ?`);
+      vals.push(data[key]);
+    }
+  }
+
+  if (sets.length > 0) {
+    vals.push(id);
+    db.prepare(`UPDATE cards SET ${sets.join(", ")} WHERE id = ?`).run(
+      ...vals,
+    );
+  }
+
+  return getCardById(id);
 }
 
 export function deleteCard(id) {
-  const idx = cards.findIndex((c) => c.id === id);
-  if (idx === -1) return false;
-  cards.splice(idx, 1);
-  return true;
+  const result = db.prepare("DELETE FROM cards WHERE id = ?").run(id);
+  return result.changes > 0;
 }
 
 export function moveCard(cardId, targetListId) {
-  const idx = cards.findIndex((c) => c.id === cardId);
-  if (idx === -1) return null;
-  cards[idx] = { ...cards[idx], listId: targetListId };
-  return cards[idx];
+  const result = db
+    .prepare("UPDATE cards SET list_id = ? WHERE id = ?")
+    .run(targetListId, cardId);
+  if (result.changes === 0) return null;
+  return enrichCard(
+    db.prepare("SELECT * FROM cards WHERE id = ?").get(cardId),
+  );
 }
 
+// ============= COMMENTS =============
+
 export function addComment(cardId, text, author) {
-  const idx = cards.findIndex((c) => c.id === cardId);
-  if (idx === -1) return null;
-  const comment = { id: genId(), text, author, createdAt: Date.now() };
-  cards[idx].comments.push(comment);
-  return comment;
+  const card = db.prepare("SELECT id FROM cards WHERE id = ?").get(cardId);
+  if (!card) return null;
+
+  const info = db
+    .prepare("INSERT INTO comments (card_id, text, author) VALUES (?, ?, ?)")
+    .run(cardId, text, author || "Anonymous");
+
+  return toCamel(
+    db.prepare("SELECT * FROM comments WHERE id = ?").get(Number(info.lastInsertRowid)),
+  );
 }
 
 export function deleteComment(cardId, commentId) {
-  const idx = cards.findIndex((c) => c.id === cardId);
-  if (idx === -1) return null;
-  const before = cards[idx].comments.length;
-  cards[idx].comments = cards[idx].comments.filter(
-    (c) => c.id !== commentId,
-  );
-  return cards[idx].comments.length < before;
+  const card = db.prepare("SELECT id FROM cards WHERE id = ?").get(cardId);
+  if (!card) return null;
+
+  const result = db
+    .prepare("DELETE FROM comments WHERE id = ? AND card_id = ?")
+    .run(commentId, cardId);
+  return result.changes > 0;
 }
 
-// ============= SEED DATA =============
+// ============= LABELS =============
 
-const user = users[0];
-const b1 = createBoard(user.id, "My Project");
-const b2 = createBoard(user.id, "Personal Tasks");
+export function addLabel(cardId, label) {
+  const card = db.prepare("SELECT id FROM cards WHERE id = ?").get(cardId);
+  if (!card) return null;
 
-const l1 = getListsByBoard(b1.id); // [Todo, In Progress, Review, Done]
-const l2 = getListsByBoard(b2.id);
+  const info = db
+    .prepare("INSERT INTO labels (card_id, color, text) VALUES (?, ?, ?)")
+    .run(cardId, label.color || "", label.text || "");
 
-const c1 = createCard(l1[0].id, "Design landing page");
-const c2 = createCard(l1[0].id, "Setup CI/CD");
-const c3 = createCard(l1[1].id, "Implement auth");
-const c4 = createCard(l1[1].id, "Build API");
-const c5 = createCard(l1[2].id, "Code review");
-const c6 = createCard(l1[3].id, "Deploy to production");
+  return toCamel(
+    db.prepare("SELECT * FROM labels WHERE id = ?").get(Number(info.lastInsertRowid)),
+  );
+}
 
-createCard(l2[0].id, "Buy groceries");
-createCard(l2[0].id, "Read book");
-createCard(l2[1].id, "Learn React");
-createCard(l2[2].id, "Write blog post");
-const dc = createCard(l2[3].id, "Clean room");
-
-addComment(c1.id, "Need to finalize color scheme", user.name);
-addComment(c3.id, "Use JWT for tokens", user.name);
-addComment(c4.id, "RESTful endpoints done", user.name);
-addComment(dc.id, "This weekend!", user.name);
+export function removeLabel(cardId, labelId) {
+  const result = db
+    .prepare("DELETE FROM labels WHERE id = ? AND card_id = ?")
+    .run(labelId, cardId);
+  return result.changes > 0;
+}
