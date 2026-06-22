@@ -17,28 +17,28 @@ const useBoardStore = create(
       fetchBoards: async () => {
         set({ isLoading: true }, false, "fetchBoards/start");
         try {
-          const data = await api.getData();
-          if (data) {
-            set(
-              {
-                boards: data.boards || [],
-                lists: data.lists || [],
-                cards: data.cards || [],
-                isLoading: false,
-              },
-              false,
-              "fetchBoards/success",
-            );
-          } else {
-            set({ isLoading: false });
-          }
+          const boards = await api.getBoards();
+          set({ boards: boards || [], isLoading: false }, false, "fetchBoards/success");
         } catch {
           set({ isLoading: false }, false, "fetchBoards/error");
         }
       },
 
-      setCurrentBoard: (board) =>
-        set({ currentBoard: board }, false, "setCurrentBoard"),
+      setCurrentBoard: async (board) => {
+        if (!board) {
+          set({ currentBoard: null, lists: [], cards: [] }, false, "setCurrentBoard/null");
+          return;
+        }
+        set({ currentBoard: board }, false, "setCurrentBoard/start");
+        try {
+          const full = await api.getBoard(board.id);
+          const lists = (full.lists || []).map(({ cards, ...list }) => list);
+          const cards = (full.lists || []).flatMap((l) => l.cards || []);
+          set({ lists, cards, currentBoard: full }, false, "setCurrentBoard/done");
+        } catch (err) {
+          console.error("Failed to load board:", err);
+        }
+      },
 
       createBoard: async (name) => {
         try {
@@ -154,7 +154,7 @@ const useBoardStore = create(
         );
 
         try {
-          await api.reorderList(activeNum, overNum);
+          await api.reorderList(activeNum, { targetListId: overNum });
         } catch (err) {
           console.error("moveList error:", err);
           set(
@@ -270,7 +270,7 @@ const useBoardStore = create(
         );
 
         try {
-          await api.moveCard(cid, tlid);
+          await api.moveCard(cid, { targetListId: tlid, targetPosition: targetIndex });
         } catch (err) {
           console.error("moveCard error:", err);
           set(
@@ -327,7 +327,7 @@ const useBoardStore = create(
 
       addLabel: async (cardId, label) => {
         try {
-          const newLabel = await api.addLabel(cardId, label.color, label.text);
+          const newLabel = await api.addLabel(cardId, label);
           set(
             (state) => ({
               cards: state.cards.map((c) =>
@@ -368,7 +368,7 @@ const useBoardStore = create(
 
       setDueDate: async (cardId, dateString) => {
         try {
-          await api.setDueDate(cardId, dateString);
+          await api.setDueDate(cardId, { dueDate: dateString });
           set(
             (state) => ({
               cards: state.cards.map((c) =>
