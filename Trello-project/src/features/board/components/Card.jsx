@@ -41,7 +41,7 @@
       transition,
       isDragging,
     } = useSortable({
-      id: String(card.id),
+      id: `card-${card.id}`,
       data: { type: 'card', card },
       handle: true,
     });

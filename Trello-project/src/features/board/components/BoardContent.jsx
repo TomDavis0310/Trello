@@ -30,13 +30,13 @@ function buildCardsByList(cards) {
 }
 
 function buildListIds(lists) {
-  return lists.map((l) => String(l.id));
+  return lists.map((l) => `list-${l.id}`);
 }
 
 function buildCardMap(cards) {
   const map = {};
   cards.forEach((c) => {
-    map[String(c.id)] = c;
+    map[`card-${c.id}`] = c;
   });
   return map;
 }
@@ -151,12 +151,13 @@ export default function BoardContent({ boardId }) {
       isDraggingRef.current = true;
 
       const activeId = String(active.id);
+      const rawId = activeId.replace(/^(card-|list-)/, '');
       let type = active.data.current?.type;
 
       // Cơ chế phòng vệ tự động đoán type nếu OpenCode truyền thiếu data
       if (!type) {
         const currentStoreCards = useBoardStore.getState().cards;
-        const isCard = currentStoreCards.some((c) => String(c.id) === activeId);
+        const isCard = currentStoreCards.some((c) => String(c.id) === rawId);
         type = isCard ? "card" : "list";
       }
 
@@ -171,7 +172,7 @@ export default function BoardContent({ boardId }) {
         activeItemRef.current = { type: "card", data: cardData };
       } else if (type === "list") {
         const listData =
-          lists.find((l) => String(l.id) === activeId) ||
+          lists.find((l) => String(l.id) === rawId) ||
           active.data.current?.list;
         setActiveItem(listData);
         setActiveType("list");
@@ -193,29 +194,31 @@ export default function BoardContent({ boardId }) {
     if (activeId === overId) return;
 
     const currentClone = clonedCardsRef.current;
-    if (!currentClone) return; // Nếu đang kéo thả List, bỏ qua xử lý hoán đổi mảng của Card
+    if (!currentClone) return;
 
-    const activeListId = findContainer(activeId, currentClone);
+    // Strip prefix for clone lookups (clone stores raw IDs)
+    const rawActiveId = activeId.replace(/^card-/, '');
+    const rawOverId = overId.replace(/^(card-|list-)/, '');
+
+    const activeListId = findContainer(rawActiveId, currentClone);
     if (!activeListId) return;
 
     let overListId = null;
 
-    // Phân tích xem điểm chuột đang đè lên (overId) thuộc về Card hay List rỗng
-    if (findContainer(overId, currentClone)) {
-      overListId = findContainer(overId, currentClone);
-    } else if (currentClone[overId] || over.data.current?.type === "list") {
-      overListId = overId;
+    if (findContainer(rawOverId, currentClone)) {
+      overListId = findContainer(rawOverId, currentClone);
+    } else if (currentClone[rawOverId] || over.data.current?.type === "list") {
+      overListId = rawOverId;
     }
 
     if (!overListId || activeListId === overListId) return;
 
-    // Thực hiện tính toán hoán đổi vị trí Card xuyên cột ảo trên State local
     const sourceCards = currentClone[activeListId].filter(
-      (id) => id !== activeId,
+      (id) => id !== rawActiveId,
     );
     const targetCards = [...(currentClone[overListId] || [])];
 
-    let overIndex = targetCards.indexOf(overId);
+    let overIndex = targetCards.indexOf(rawOverId);
     if (overIndex < 0) {
       overIndex = over.data.current?.type === "list" ? 0 : targetCards.length;
     }
@@ -225,7 +228,7 @@ export default function BoardContent({ boardId }) {
       [activeListId]: sourceCards,
       [overListId]: [
         ...targetCards.slice(0, overIndex),
-        activeId,
+        rawActiveId,
         ...targetCards.slice(overIndex),
       ],
     };
@@ -249,13 +252,14 @@ export default function BoardContent({ boardId }) {
 
       const activeId = String(active.id);
       const overId = String(over.id);
+      const rawActiveId = activeId.replace(/^(card-|list-)/, '');
+      const rawOverId = overId.replace(/^(card-|list-)/, '');
       const store = useBoardStore.getState();
 
-      // Xác định đối tượng vừa kết thúc kéo dựa trên sự tồn tại của mảng clone
       const isCardDrag = clonedCardsRef.current !== null;
 
       if (isCardDrag) {
-        const activeCard = store.cards.find((c) => String(c.id) === activeId);
+        const activeCard = store.cards.find((c) => String(c.id) === rawActiveId);
         if (!activeCard) {
           handleDragCancel();
           return;
@@ -263,34 +267,42 @@ export default function BoardContent({ boardId }) {
 
         const finalClone = clonedCardsRef.current;
         const sourceListId = String(activeCard.listId);
-        let targetListId = findContainer(activeId, finalClone);
+        let targetListId = findContainer(rawActiveId, finalClone);
         if (over.data.current?.type === "list") {
-          targetListId = overId;
+          targetListId = rawOverId;
         } else if (!targetListId) {
           targetListId = sourceListId;
         }
         let targetIndex = 0;
 
         if (sourceListId === targetListId) {
-          // Trường hợp 1: Kéo thả nội bộ trong cùng một cột
           const listCards = [...store.cards]
             .filter((c) => String(c.listId) === targetListId)
             .sort((a, b) => a.position - b.position)
             .map((c) => String(c.id));
 
-          const oldIdx = listCards.indexOf(activeId);
-          const newIdx = listCards.indexOf(overId);
+          const oldIdx = listCards.indexOf(rawActiveId);
+          const newIdx = listCards.indexOf(rawOverId);
 
           if (oldIdx !== -1 && newIdx !== -1) {
             const reordered = arrayMove(listCards, oldIdx, newIdx);
-            targetIndex = reordered.indexOf(activeId);
+            targetIndex = reordered.indexOf(rawActiveId);
           } else if (over.data.current?.type === "list" && oldIdx !== -1) {
             targetIndex = 0;
+          } else if (oldIdx !== -1) {
+            // over có thể là 1 vị trí trống trong list (ghé vào cuối)
+            const overCard = store.cards.find((c) => String(c.id) === rawOverId);
+            if (!overCard || String(overCard.listId) === targetListId) {
+              const newIdx = listCards.indexOf(rawOverId);
+              if (newIdx >= 0) {
+                const reordered = arrayMove(listCards, oldIdx, newIdx);
+                targetIndex = reordered.indexOf(rawActiveId);
+              }
+            }
           }
         } else if (finalClone) {
-          // Trường hợp 2: Kéo sang cột khác
           const targetCardIds = finalClone[targetListId] || [];
-          targetIndex = targetCardIds.indexOf(activeId);
+          targetIndex = targetCardIds.indexOf(rawActiveId);
           if (over.data.current?.type === "list") {
             targetIndex = 0;
           } else if (targetIndex < 0) {
@@ -298,24 +310,20 @@ export default function BoardContent({ boardId }) {
           }
         }
 
-        // Kỹ thuật tự động ép kiểu dữ liệu nguyên bản để bọc khớp với API Backend (Number / String)
-        const parsedCardId = isNaN(Number(activeId))
-          ? activeId
-          : Number(activeId);
+        const parsedCardId = isNaN(Number(rawActiveId))
+          ? rawActiveId
+          : Number(rawActiveId);
         const parsedListId = isNaN(Number(targetListId))
           ? targetListId
           : Number(targetListId);
 
-        // Chốt hạ đẩy dữ liệu về Zustand Store làm sạch giao diện và gọi API đồng bộ
         store.moveCard(parsedCardId, parsedListId, targetIndex);
       } else {
-        // Trường hợp 3: Kéo thả hoán đổi vị trí của Cột (List)
-        if (activeId !== overId) {
-          store.moveList(activeId, overId);
+        if (rawActiveId !== rawOverId) {
+          store.moveList(rawActiveId, rawOverId);
         }
       }
 
-      // Dọn dẹp sạch toàn bộ các state phụ trợ tạm thời sau khi xử lý kết thúc thành công
       setActiveItem(null);
       setActiveType(null);
       activeItemRef.current = null;
@@ -353,10 +361,11 @@ export default function BoardContent({ boardId }) {
           strategy={horizontalListSortingStrategy}
         >
           {listIds.map((listId) => {
-            const list = lists.find((l) => String(l.id) === listId);
+            const rawListId = listId.replace(/^list-/, '');
+            const list = lists.find((l) => String(l.id) === rawListId);
             if (!list) return null;
 
-            const cardIds = displayCardsByList[listId] ?? EMPTY_ITEMS;
+            const cardIds = displayCardsByList[rawListId] ?? EMPTY_ITEMS;
 
             return (
               <ListColumn

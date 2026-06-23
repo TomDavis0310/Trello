@@ -1,0 +1,87 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String
+  name      String   @default("")
+  createdAt DateTime @default(now()) @map("created_at")
+  boards    Board[]
+  sessions  Session[]
+
+  @@map("users")
+}
+
+model Session {
+  token     String   @id
+  userId    Int      @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model Board {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  name      String   @default("")
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lists     List[]
+
+  @@map("boards")
+}
+
+model List {
+  id      Int    @id @default(autoincrement())
+  boardId Int    @map("board_id")
+  name    String @default("")
+  order   Int    @map("order")
+  board   Board  @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  cards   Card[]
+
+  @@map("lists")
+}
+
+model Card {
+  id          Int       @id @default(autoincrement())
+  listId      Int       @map("list_id")
+  title       String    @default("")
+  description String    @default("")
+  position    Int       @default(0)
+  dueDate     String?   @map("due_date")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  list        List      @relation(fields: [listId], references: [id], onDelete: Cascade)
+  comments    Comment[]
+  labels      Label[]
+
+  @@map("cards")
+}
+
+model Comment {
+  id        Int      @id @default(autoincrement())
+  cardId    Int      @map("card_id")
+  text      String   @default("")
+  author    String   @default("")
+  createdAt DateTime @default(now()) @map("created_at")
+  card      Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  @@map("comments")
+}
+
+model Label {
+  id     Int    @id @default(autoincrement())
+  cardId Int    @map("card_id")
+  color  String @default("")
+  text   String @default("")
+  card   Card   @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  @@map("labels")
+}

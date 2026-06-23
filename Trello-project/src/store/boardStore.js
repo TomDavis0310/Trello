@@ -160,16 +160,21 @@ const useBoardStore = create(
           );
 
           const reorderedLists = await api.reorderList(activeNum, { targetListId: overNum });
-          if (reorderedLists) {
-            const otherWithPos = otherLists.map((l) => {
-              const matched = reorderedLists.find((r) => r.id === l.id);
-              return matched ? { ...l, order: matched.order } : l;
-            });
+          if (Array.isArray(reorderedLists)) {
+            // API trả về toàn bộ List của board hiện tại, đã sort theo order
+            // Ghi đè hoàn toàn, giữ nguyên list của board khác
             set(
-              { lists: [...otherWithPos, ...reorderedLists] },
+              {
+                lists: [
+                  ...lists.filter((l) => Number(l.boardId) !== bid),
+                  ...reorderedLists,
+                ],
+              },
               false,
               "moveList/success",
             );
+          } else if (reorderedLists) {
+            console.log("Format API reorderList thực tế:", reorderedLists);
           }
         } catch (err) {
           console.error("moveList error:", err);
@@ -300,24 +305,51 @@ const useBoardStore = create(
             targetPosition: targetIndex,
           });
 
-          // 3. API THÀNH CÔNG: thay thế toàn bộ cards trong source + target lists
+          // 3. API THÀNH CÔNG: đồng bộ state từ response
           set(
             (state) => {
-              const srcId = String(res.sourceListId);
-              const tgtId = String(res.targetListId);
-              const idsToReplace = new Set([srcId, tgtId]);
+              if (res && typeof res === "object") {
+                if (Array.isArray(res.sourceCards)) {
+                  // Format: { sourceListId, targetListId, sourceCards, targetCards }
+                  const srcId = String(res.sourceListId);
+                  const tgtId = String(res.targetListId);
+                  const idsToReplace = new Set([srcId, tgtId]);
+                  const otherCards = state.cards.filter(
+                    (c) => !idsToReplace.has(String(c.listId)),
+                  );
+                  return {
+                    cards: [
+                      ...otherCards,
+                      ...res.sourceCards,
+                      ...(srcId !== tgtId ? res.targetCards : []),
+                    ],
+                  };
+                }
 
-              const otherCards = state.cards.filter(
-                (c) => !idsToReplace.has(String(c.listId)),
-              );
+                if ("id" in res && "listId" in res && "position" in res) {
+                  // Format: single card object — update cục bộ
+                  const updatedId = String(res.id);
+                  return {
+                    cards: state.cards.map((c) =>
+                      String(c.id) === updatedId ? { ...c, ...res } : c,
+                    ),
+                  };
+                }
+              }
 
-              return {
-                cards: [
-                  ...otherCards,
-                  ...res.sourceCards,
-                  ...(srcId !== tgtId ? res.targetCards : []),
-                ],
-              };
+              // Format không xác định — log và giữ nguyên optimistic state
+              console.log("moveCard: format response không xác định:", res);
+              const updatedCard = state.cards.find((c) => String(c.id) === cid);
+              if (updatedCard) {
+                return {
+                  cards: state.cards.map((c) =>
+                    String(c.id) === cid
+                      ? { ...c, listId: targetListId }
+                      : c,
+                  ),
+                };
+              }
+              return state;
             },
             false,
             "moveCard/success",

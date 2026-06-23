@@ -33,7 +33,7 @@ export default function ListColumn({
     transition,
     isDragging,
   } = useSortable({
-    id: String(list.id),
+    id: `list-${list.id}`,
     data: { type: "list", list },
     handle: true,
   });
@@ -46,7 +46,7 @@ export default function ListColumn({
   };
 
   // 2. Ép toàn bộ cardIds về dạng String để SortableContext nhận diện chính xác
-  const safeStringCardIds = cardIds.map((id) => String(id));
+  const safeStringCardIds = cardIds.map((id) => `card-${id}`);
 
   return (
     <div
