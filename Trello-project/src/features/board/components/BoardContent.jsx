@@ -5,6 +5,7 @@ import {
   useSensors,
   useSensor,
   PointerSensor,
+  closestCorners,
 } from "@dnd-kit/core";
 import {
   SortableContext,
@@ -19,7 +20,8 @@ const EMPTY_ITEMS = [];
 
 function buildCardsByList(cards) {
   const map = {};
-  cards.forEach((c) => {
+  const sorted = [...cards].sort((a, b) => a.position - b.position);
+  sorted.forEach((c) => {
     const key = String(c.listId);
     if (!map[key]) map[key] = [];
     map[key].push(String(c.id));
@@ -64,7 +66,7 @@ export default function BoardContent({ boardId }) {
       allLists
         .filter((l) => String(l.boardId) === String(boardId))
         .sort(
-          (a, b) => (a.position ?? a.order ?? 0) - (b.position ?? b.order ?? 0),
+          (a, b) => (a.order ?? 0) - (b.order ?? 0),
         ),
     [allLists, boardId],
   );
@@ -215,7 +217,7 @@ export default function BoardContent({ boardId }) {
 
     let overIndex = targetCards.indexOf(overId);
     if (overIndex < 0) {
-      overIndex = targetCards.length;
+      overIndex = over.data.current?.type === "list" ? 0 : targetCards.length;
     }
 
     const nextClone = {
@@ -271,22 +273,29 @@ export default function BoardContent({ boardId }) {
 
         if (sourceListId === targetListId) {
           // Trường hợp 1: Kéo thả nội bộ trong cùng một cột
-          const listCardIds = store.cards
+          const listCards = [...store.cards]
             .filter((c) => String(c.listId) === targetListId)
+            .sort((a, b) => a.position - b.position)
             .map((c) => String(c.id));
 
-          const oldIdx = listCardIds.indexOf(activeId);
-          const newIdx = listCardIds.indexOf(overId);
+          const oldIdx = listCards.indexOf(activeId);
+          const newIdx = listCards.indexOf(overId);
 
           if (oldIdx !== -1 && newIdx !== -1) {
-            const reordered = arrayMove(listCardIds, oldIdx, newIdx);
+            const reordered = arrayMove(listCards, oldIdx, newIdx);
             targetIndex = reordered.indexOf(activeId);
+          } else if (over.data.current?.type === "list" && oldIdx !== -1) {
+            targetIndex = 0;
           }
         } else if (finalClone) {
-          // Trường hợp 2: Kéo sang cột khác (Lấy index sau cùng đã tính ở DragOver)
+          // Trường hợp 2: Kéo sang cột khác
           const targetCardIds = finalClone[targetListId] || [];
           targetIndex = targetCardIds.indexOf(activeId);
-          if (targetIndex < 0) targetIndex = targetCardIds.length;
+          if (over.data.current?.type === "list") {
+            targetIndex = 0;
+          } else if (targetIndex < 0) {
+            targetIndex = targetCardIds.length;
+          }
         }
 
         // Kỹ thuật tự động ép kiểu dữ liệu nguyên bản để bọc khớp với API Backend (Number / String)
@@ -317,8 +326,9 @@ export default function BoardContent({ boardId }) {
   );
 
   return (
-    <DndContext
+      <DndContext
       sensors={sensors}
+      collisionDetection={closestCorners}
       onDragStart={handleDragStart}
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}

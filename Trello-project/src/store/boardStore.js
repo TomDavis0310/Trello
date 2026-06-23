@@ -12,6 +12,7 @@ const useBoardStore = create(
       cards: [],
       activeCardId: null,
       isLoading: false,
+      isMoving: false,
       error: null,
 
       fetchBoards: async () => {
@@ -25,18 +26,20 @@ const useBoardStore = create(
       },
 
       setCurrentBoard: async (board) => {
+        const prev = get().currentBoard;
         if (!board) {
           set({ currentBoard: null, lists: [], cards: [] }, false, "setCurrentBoard/null");
           return;
         }
-        set({ currentBoard: board }, false, "setCurrentBoard/start");
+        set({ isLoading: true }, false, "setCurrentBoard/start");
         try {
           const full = await api.getBoard(board.id);
           const lists = (full.lists || []).map(({ cards, ...list }) => list);
           const cards = (full.lists || []).flatMap((l) => l.cards || []);
-          set({ lists, cards, currentBoard: full }, false, "setCurrentBoard/done");
+          set({ lists, cards, currentBoard: full, isLoading: false }, false, "setCurrentBoard/done");
         } catch (err) {
           console.error("Failed to load board:", err);
+          set({ currentBoard: prev, isLoading: false, error: err.message }, false, "setCurrentBoard/rollback");
         }
       },
 
@@ -110,51 +113,64 @@ const useBoardStore = create(
       },
 
       moveList: async (activeId, overId) => {
+        if (get().isMoving) return;
+        set({ isMoving: true }, false, "moveList/lock");
+
         const { lists } = get();
         const prevLists = [...lists];
 
-        const activeNum = Number(activeId);
-        const overNum = Number(overId);
-
-        const movedList = lists.find((l) => Number(l.id) === activeNum);
-        if (!movedList) return;
-        const bid = Number(movedList.boardId);
-
-        const boardLists = lists
-          .filter((l) => Number(l.boardId) === bid)
-          .sort(
-            (a, b) =>
-              (a.position ?? a.order ?? 0) - (b.position ?? b.order ?? 0),
-          );
-        const otherLists = lists.filter((l) => Number(l.boardId) !== bid);
-
-        const oldIndex = boardLists.findIndex(
-          (l) => Number(l.id) === activeNum,
-        );
-        const newIndex = boardLists.findIndex(
-          (l) => Number(l.id) === overNum,
-        );
-        if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex)
-          return;
-
-        const reordered = [...boardLists];
-        const [removed] = reordered.splice(oldIndex, 1);
-        reordered.splice(newIndex, 0, removed);
-
-        const updated = reordered.map((list, i) => ({
-          ...list,
-          position: i,
-          order: i,
-        }));
-
-        set(
-          { lists: [...otherLists, ...updated] },
-          false,
-          "moveList/optimistic",
-        );
-
         try {
-          await api.reorderList(activeNum, { targetListId: overNum });
+          const activeNum = Number(activeId);
+          const overNum = Number(overId);
+
+          const movedList = lists.find((l) => Number(l.id) === activeNum);
+          if (!movedList) return;
+
+          const bid = Number(movedList.boardId);
+
+          const boardLists = lists
+            .filter((l) => Number(l.boardId) === bid)
+            .sort(
+              (a, b) =>
+                (a.order ?? 0) - (b.order ?? 0),
+            );
+          const otherLists = lists.filter((l) => Number(l.boardId) !== bid);
+
+          const oldIndex = boardLists.findIndex(
+            (l) => Number(l.id) === activeNum,
+          );
+          const newIndex = boardLists.findIndex(
+            (l) => Number(l.id) === overNum,
+          );
+          if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return;
+
+          const reordered = [...boardLists];
+          const [removed] = reordered.splice(oldIndex, 1);
+          reordered.splice(newIndex, 0, removed);
+
+          const updated = reordered.map((list, i) => ({
+            ...list,
+            order: i,
+          }));
+
+          set(
+            { lists: [...otherLists, ...updated] },
+            false,
+            "moveList/optimistic",
+          );
+
+          const reorderedLists = await api.reorderList(activeNum, { targetListId: overNum });
+          if (reorderedLists) {
+            const otherWithPos = otherLists.map((l) => {
+              const matched = reorderedLists.find((r) => r.id === l.id);
+              return matched ? { ...l, order: matched.order } : l;
+            });
+            set(
+              { lists: [...otherWithPos, ...reorderedLists] },
+              false,
+              "moveList/success",
+            );
+          }
         } catch (err) {
           console.error("moveList error:", err);
           set(
@@ -162,6 +178,8 @@ const useBoardStore = create(
             false,
             "moveList/rollback",
           );
+        } finally {
+          set({ isMoving: false }, false, "moveList/unlock");
         }
       },
 
@@ -245,32 +263,65 @@ const useBoardStore = create(
       },
 
       moveCard: async (cardId, targetListId, targetIndex) => {
+        if (get().isMoving) return;
+        set({ isMoving: true }, false, "moveCard/lock");
+
         const prevCards = get().cards;
-        const cid = Number(cardId);
-        const tlid = Number(targetListId);
-        const card = prevCards.find((c) => Number(c.id) === cid);
-        if (!card) return;
-
-        const updatedCard = { ...card, listId: tlid };
-        const otherCards = prevCards.filter((c) => Number(c.id) !== cid);
-
-        const targetListCards = otherCards
-          .filter((c) => Number(c.listId) === tlid)
-          .reduce((acc, c) => { acc.push(c); return acc; }, []);
-        targetListCards.splice(targetIndex, 0, updatedCard);
-
-        const restCards = otherCards.filter(
-          (c) => Number(c.listId) !== tlid,
-        );
-
-        set(
-          { cards: [...restCards, ...targetListCards] },
-          false,
-          "moveCard/optimistic",
-        );
 
         try {
-          await api.moveCard(cid, { targetListId: tlid, targetPosition: targetIndex });
+          // 1. Optimistic update: dịch chuyển tạm trên giao diện
+          const cid = String(cardId);
+          const tlid = String(targetListId);
+
+          const card = prevCards.find((c) => String(c.id) === cid);
+          if (!card) return;
+
+          const updatedCard = { ...card, listId: targetListId };
+          const otherCards = prevCards.filter((c) => String(c.id) !== cid);
+
+          const targetListCards = otherCards
+            .filter((c) => String(c.listId) === tlid)
+            .reduce((acc, c) => { acc.push(c); return acc; }, []);
+          targetListCards.splice(targetIndex, 0, updatedCard);
+
+          const restCards = otherCards.filter(
+            (c) => String(c.listId) !== tlid,
+          );
+
+          set(
+            { cards: [...restCards, ...targetListCards] },
+            false,
+            "moveCard/optimistic",
+          );
+
+          // 2. Gọi API
+          const res = await api.moveCard(Number(cid), {
+            targetListId: Number(tlid),
+            targetPosition: targetIndex,
+          });
+
+          // 3. API THÀNH CÔNG: thay thế toàn bộ cards trong source + target lists
+          set(
+            (state) => {
+              const srcId = String(res.sourceListId);
+              const tgtId = String(res.targetListId);
+              const idsToReplace = new Set([srcId, tgtId]);
+
+              const otherCards = state.cards.filter(
+                (c) => !idsToReplace.has(String(c.listId)),
+              );
+
+              return {
+                cards: [
+                  ...otherCards,
+                  ...res.sourceCards,
+                  ...(srcId !== tgtId ? res.targetCards : []),
+                ],
+              };
+            },
+            false,
+            "moveCard/success",
+          );
         } catch (err) {
           console.error("moveCard error:", err);
           set(
@@ -278,108 +329,187 @@ const useBoardStore = create(
             false,
             "moveCard/rollback",
           );
+        } finally {
+          set({ isMoving: false }, false, "moveCard/unlock");
         }
       },
 
       addComment: async (cardId, text, author) => {
-        try {
-          const comment = await api.addComment(cardId, text, author);
-          set(
-            (state) => ({
-              cards: state.cards.map((c) =>
-                c.id === cardId
-                  ? { ...c, comments: [...(c.comments || []), comment] }
-                  : c,
-              ),
-            }),
-            false,
-            "addComment",
-          );
-          return comment;
-        } catch (err) {
-          set({ error: err.message }, false, "addComment/error");
-        }
-      },
+        const prevCards = get().cards;
+        const tempId = `temp_${Date.now()}`;
+        const tempComment = { id: tempId, cardId, text, author: author || "Anonymous" };
 
-      deleteComment: async (cardId, commentId) => {
+        set(
+          (state) => ({
+            cards: state.cards.map((c) =>
+              c.id === cardId
+                ? { ...c, comments: [...(c.comments || []), tempComment] }
+                : c,
+            ),
+          }),
+          false,
+          "addComment/optimistic",
+        );
+
         try {
-          await api.deleteComment(cardId, commentId);
+          const realComment = await api.addComment(cardId, text, author);
           set(
             (state) => ({
               cards: state.cards.map((c) =>
                 c.id === cardId
                   ? {
                       ...c,
-                      comments: (c.comments || []).filter(
-                        (cm) => cm.id !== commentId,
+                      comments: (c.comments || []).map((cm) =>
+                        cm.id === tempId ? realComment : cm,
                       ),
                     }
                   : c,
               ),
             }),
             false,
-            "deleteComment",
+            "addComment/success",
           );
+          return realComment;
         } catch (err) {
-          set({ error: err.message }, false, "deleteComment/error");
+          console.error("addComment error:", err);
+          set(
+            { cards: prevCards, error: err.message },
+            false,
+            "addComment/rollback",
+          );
+        }
+      },
+
+      deleteComment: async (cardId, commentId) => {
+        const prevCards = get().cards;
+
+        set(
+          (state) => ({
+            cards: state.cards.map((c) =>
+              c.id === cardId
+                ? {
+                    ...c,
+                    comments: (c.comments || []).filter(
+                      (cm) => cm.id !== commentId,
+                    ),
+                  }
+                : c,
+            ),
+          }),
+          false,
+          "deleteComment/optimistic",
+        );
+
+        try {
+          await api.deleteComment(cardId, commentId);
+        } catch (err) {
+          console.error("deleteComment error:", err);
+          set(
+            { cards: prevCards, error: err.message },
+            false,
+            "deleteComment/rollback",
+          );
         }
       },
 
       addLabel: async (cardId, label) => {
-        try {
-          const newLabel = await api.addLabel(cardId, label);
-          set(
-            (state) => ({
-              cards: state.cards.map((c) =>
-                c.id === cardId
-                  ? { ...c, labels: [...(c.labels || []), newLabel] }
-                  : c,
-              ),
-            }),
-            false,
-            "addLabel",
-          );
-        } catch (err) {
-          set({ error: err.message }, false, "addLabel/error");
-        }
-      },
+        const prevCards = get().cards;
+        const tempId = `temp_${Date.now()}`;
+        const tempLabel = { id: tempId, cardId, color: label.color || "", text: label.text || "" };
 
-      removeLabel: async (cardId, labelId) => {
+        set(
+          (state) => ({
+            cards: state.cards.map((c) =>
+              c.id === cardId
+                ? { ...c, labels: [...(c.labels || []), tempLabel] }
+                : c,
+            ),
+          }),
+          false,
+          "addLabel/optimistic",
+        );
+
         try {
-          await api.removeLabel(cardId, labelId);
+          const realLabel = await api.addLabel(cardId, label);
           set(
             (state) => ({
               cards: state.cards.map((c) =>
                 c.id === cardId
                   ? {
                       ...c,
-                      labels: (c.labels || []).filter((l) => l.id !== labelId),
+                      labels: (c.labels || []).map((l) =>
+                        l.id === tempId ? realLabel : l,
+                      ),
                     }
                   : c,
               ),
             }),
             false,
-            "removeLabel",
+            "addLabel/success",
           );
+          return realLabel;
         } catch (err) {
-          set({ error: err.message }, false, "removeLabel/error");
+          console.error("addLabel error:", err);
+          set(
+            { cards: prevCards, error: err.message },
+            false,
+            "addLabel/rollback",
+          );
+        }
+      },
+
+      removeLabel: async (cardId, labelId) => {
+        const prevCards = get().cards;
+
+        set(
+          (state) => ({
+            cards: state.cards.map((c) =>
+              c.id === cardId
+                ? {
+                    ...c,
+                    labels: (c.labels || []).filter((l) => l.id !== labelId),
+                  }
+                : c,
+            ),
+          }),
+          false,
+          "removeLabel/optimistic",
+        );
+
+        try {
+          await api.removeLabel(cardId, labelId);
+        } catch (err) {
+          console.error("removeLabel error:", err);
+          set(
+            { cards: prevCards, error: err.message },
+            false,
+            "removeLabel/rollback",
+          );
         }
       },
 
       setDueDate: async (cardId, dateString) => {
+        const prevCards = get().cards;
+
+        set(
+          (state) => ({
+            cards: state.cards.map((c) =>
+              c.id === cardId ? { ...c, dueDate: dateString } : c,
+            ),
+          }),
+          false,
+          "setDueDate/optimistic",
+        );
+
         try {
           await api.setDueDate(cardId, { dueDate: dateString });
-          set(
-            (state) => ({
-              cards: state.cards.map((c) =>
-                c.id === cardId ? { ...c, dueDate: dateString } : c,
-              ),
-            }),
-            false,
-            "setDueDate",
-          );
         } catch (err) {
-          set({ error: err.message }, false, "setDueDate/error");
+          console.error("setDueDate error:", err);
+          set(
+            { cards: prevCards, error: err.message },
+            false,
+            "setDueDate/rollback",
+          );
         }
       },
 
