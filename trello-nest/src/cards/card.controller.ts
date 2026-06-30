@@ -36,18 +36,12 @@ export class CardController {
   }
 
   @Put(':id')
-  update(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: UpdateCardDto,
-  ) {
+  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateCardDto) {
     return this.cardService.update(id, dto);
   }
 
   @Put(':id/move')
-  move(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: MoveCardDto,
-  ) {
+  move(@Param('id', ParseIntPipe) id: number, @Body() dto: MoveCardDto) {
     return this.cardService.move(id, dto);
   }
 
@@ -73,10 +67,7 @@ export class CardController {
   }
 
   @Post(':id/labels')
-  addLabel(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: AddLabelDto,
-  ) {
+  addLabel(@Param('id', ParseIntPipe) id: number, @Body() dto: AddLabelDto) {
     return this.cardService.addLabel(id, dto);
   }
 

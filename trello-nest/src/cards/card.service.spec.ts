@@ -2,9 +2,26 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { CardService } from './card.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { TrelloGateway } from '../common/gateways/trello.gateway';
 
-const mockCard = { id: 1, listId: 10, title: 'Test', description: '', position: 1, dueDate: null, createdAt: new Date() };
-const mockOtherCard = { id: 2, listId: 10, title: 'Other', description: '', position: 2, dueDate: null, createdAt: new Date() };
+const mockCard = {
+  id: 1,
+  listId: 10,
+  title: 'Test',
+  description: '',
+  position: 1,
+  dueDate: null,
+  createdAt: new Date(),
+};
+const mockOtherCard = {
+  id: 2,
+  listId: 10,
+  title: 'Other',
+  description: '',
+  position: 2,
+  dueDate: null,
+  createdAt: new Date(),
+};
 const mockTargetList = { id: 20, boardId: 100, name: 'Target', order: 1 };
 
 function createMockPrisma() {
@@ -34,12 +51,17 @@ describe('CardService.move()', () => {
   beforeEach(async () => {
     mockPrisma = createMockPrisma();
 
-    mockPrisma.client.$transaction.mockImplementation(async (cb: Function) => cb({ card: mockPrisma.mockTxCard }));
+    mockPrisma.client.$transaction.mockImplementation(
+      async (cb: (tx: { card: typeof mockPrisma.mockTxCard }) => unknown) => {
+        await cb({ card: mockPrisma.mockTxCard });
+      },
+    );
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         CardService,
         { provide: PrismaService, useValue: mockPrisma },
+        { provide: TrelloGateway, useValue: { emitCardMoved: jest.fn(), emitCardCreated: jest.fn(), emitCardUpdated: jest.fn(), emitCardDeleted: jest.fn(), emitCommentAdded: jest.fn(), emitCommentDeleted: jest.fn(), emitLabelAdded: jest.fn(), emitLabelRemoved: jest.fn() } },
       ],
     }).compile();
 
@@ -64,7 +86,10 @@ describe('CardService.move()', () => {
       ];
       mockPrisma.client.card.findMany.mockResolvedValue(renumbered);
 
-      const result = await service.move(1, { targetListId: 10, targetPosition: 2 });
+      const result = await service.move(1, {
+        targetListId: 10,
+        targetPosition: 2,
+      });
 
       expect(result).toEqual({
         sourceListId: 10,
@@ -75,13 +100,16 @@ describe('CardService.move()', () => {
 
       expect(mockPrisma.mockTxCard.update).toHaveBeenCalledTimes(3);
       expect(mockPrisma.mockTxCard.update).toHaveBeenNthCalledWith(1, {
-        where: { id: 2 }, data: { position: 0 },
+        where: { id: 2 },
+        data: { position: 0 },
       });
       expect(mockPrisma.mockTxCard.update).toHaveBeenNthCalledWith(2, {
-        where: { id: 3 }, data: { position: 1 },
+        where: { id: 3 },
+        data: { position: 1 },
       });
       expect(mockPrisma.mockTxCard.update).toHaveBeenNthCalledWith(3, {
-        where: { id: 1 }, data: { position: 2 },
+        where: { id: 1 },
+        data: { position: 2 },
       });
     });
 
@@ -100,7 +128,10 @@ describe('CardService.move()', () => {
       ];
       mockPrisma.client.card.findMany.mockResolvedValue(renumbered);
 
-      const result = await service.move(1, { targetListId: 10, targetPosition: 2 });
+      const result = await service.move(1, {
+        targetListId: 10,
+        targetPosition: 2,
+      });
 
       expect(result.sourceListId).toBe(10);
       expect(result.targetListId).toBe(10);
@@ -109,20 +140,22 @@ describe('CardService.move()', () => {
 
       expect(mockPrisma.mockTxCard.update).toHaveBeenCalledTimes(3);
       expect(mockPrisma.mockTxCard.update).toHaveBeenNthCalledWith(1, {
-        where: { id: 2 }, data: { position: 0 },
+        where: { id: 2 },
+        data: { position: 0 },
       });
       expect(mockPrisma.mockTxCard.update).toHaveBeenNthCalledWith(2, {
-        where: { id: 3 }, data: { position: 1 },
+        where: { id: 3 },
+        data: { position: 1 },
       });
       expect(mockPrisma.mockTxCard.update).toHaveBeenNthCalledWith(3, {
-        where: { id: 1 }, data: { position: 2 },
+        where: { id: 1 },
+        data: { position: 2 },
       });
     });
   });
 
   describe('Cross-list move', () => {
     const crossCard = { ...mockCard, listId: 10 };
-    const listA = { id: 10, boardId: 100 };
     const listB = { id: 20, boardId: 100 };
 
     it('should remove from source, insert at targetPosition, and renumber both lists', async () => {
@@ -138,23 +171,22 @@ describe('CardService.move()', () => {
           { id: 4, listId: 20, position: 1 },
         ]);
       mockPrisma.client.card.findMany
-        .mockResolvedValueOnce([
-          { id: 2, listId: 10, position: 0 },
-        ])
+        .mockResolvedValueOnce([{ id: 2, listId: 10, position: 0 }])
         .mockResolvedValueOnce([
           { id: 3, listId: 20, position: 0 },
           { id: 1, listId: 20, position: 1 },
           { id: 4, listId: 20, position: 2 },
         ]);
 
-      const result = await service.move(1, { targetListId: 20, targetPosition: 1 });
+      const result = await service.move(1, {
+        targetListId: 20,
+        targetPosition: 1,
+      });
 
       expect(result).toEqual({
         sourceListId: 10,
         targetListId: 20,
-        sourceCards: [
-          { id: 2, listId: 10, position: 0 },
-        ],
+        sourceCards: [{ id: 2, listId: 10, position: 0 }],
         targetCards: [
           { id: 3, listId: 20, position: 0 },
           { id: 1, listId: 20, position: 1 },
@@ -164,24 +196,30 @@ describe('CardService.move()', () => {
 
       expect(mockPrisma.mockTxCard.findMany).toHaveBeenCalledTimes(2);
       expect(mockPrisma.mockTxCard.findMany).toHaveBeenNthCalledWith(1, {
-        where: { listId: 10 }, orderBy: { position: 'asc' },
+        where: { listId: 10 },
+        orderBy: { position: 'asc' },
       });
       expect(mockPrisma.mockTxCard.findMany).toHaveBeenNthCalledWith(2, {
-        where: { listId: 20 }, orderBy: { position: 'asc' },
+        where: { listId: 20 },
+        orderBy: { position: 'asc' },
       });
 
       expect(mockPrisma.mockTxCard.update).toHaveBeenCalledTimes(4);
       expect(mockPrisma.mockTxCard.update).toHaveBeenNthCalledWith(1, {
-        where: { id: 2 }, data: { position: 0 },
+        where: { id: 2 },
+        data: { position: 0 },
       });
       expect(mockPrisma.mockTxCard.update).toHaveBeenNthCalledWith(2, {
-        where: { id: 3 }, data: { listId: 20, position: 0 },
+        where: { id: 3 },
+        data: { listId: 20, position: 0 },
       });
       expect(mockPrisma.mockTxCard.update).toHaveBeenNthCalledWith(3, {
-        where: { id: 1 }, data: { listId: 20, position: 1 },
+        where: { id: 1 },
+        data: { listId: 20, position: 1 },
       });
       expect(mockPrisma.mockTxCard.update).toHaveBeenNthCalledWith(4, {
-        where: { id: 4 }, data: { listId: 20, position: 2 },
+        where: { id: 4 },
+        data: { listId: 20, position: 2 },
       });
     });
 
@@ -189,29 +227,24 @@ describe('CardService.move()', () => {
       mockPrisma.client.card.findUnique.mockResolvedValue(crossCard);
       mockPrisma.client.list.findUnique.mockResolvedValue(listB);
       mockPrisma.mockTxCard.findMany
-        .mockResolvedValueOnce([
-          { id: 2, listId: 10, position: 0 },
-        ])
-        .mockResolvedValueOnce([
-          { id: 3, listId: 20, position: 0 },
-        ]);
+        .mockResolvedValueOnce([{ id: 2, listId: 10, position: 0 }])
+        .mockResolvedValueOnce([{ id: 3, listId: 20, position: 0 }]);
       mockPrisma.client.card.findMany
-        .mockResolvedValueOnce([
-          { id: 2, listId: 10, position: 0 },
-        ])
+        .mockResolvedValueOnce([{ id: 2, listId: 10, position: 0 }])
         .mockResolvedValueOnce([
           { id: 3, listId: 20, position: 0 },
           { id: 1, listId: 20, position: 1 },
         ]);
 
-      const result = await service.move(1, { targetListId: 20, targetPosition: 5 });
+      const result = await service.move(1, {
+        targetListId: 20,
+        targetPosition: 5,
+      });
 
       expect(result).toEqual({
         sourceListId: 10,
         targetListId: 20,
-        sourceCards: [
-          { id: 2, listId: 10, position: 0 },
-        ],
+        sourceCards: [{ id: 2, listId: 10, position: 0 }],
         targetCards: [
           { id: 3, listId: 20, position: 0 },
           { id: 1, listId: 20, position: 1 },
@@ -219,10 +252,12 @@ describe('CardService.move()', () => {
       });
 
       expect(mockPrisma.mockTxCard.update).toHaveBeenNthCalledWith(2, {
-        where: { id: 3 }, data: { listId: 20, position: 0 },
+        where: { id: 3 },
+        data: { listId: 20, position: 0 },
       });
       expect(mockPrisma.mockTxCard.update).toHaveBeenNthCalledWith(3, {
-        where: { id: 1 }, data: { listId: 20, position: 1 },
+        where: { id: 1 },
+        data: { listId: 20, position: 1 },
       });
     });
   });

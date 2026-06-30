@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
+import { useDroppable } from "@dnd-kit/core";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
@@ -24,6 +25,18 @@ export default function ListColumn({
   filterLabel,
   setFilterLabel,
 }) {
+  const sortableData = useMemo(
+    () => ({ type: "list", listId: String(list.id) }),
+    [list.id],
+  );
+  const {
+    setNodeRef: setCardsDroppableRef,
+    isOver: isCardAreaOver,
+  } = useDroppable({
+    id: `list-drop-${list.id}`,
+    data: sortableData,
+  });
+
   // 1. Khai báo useSortable cho List với ID dạng String chuẩn chỉnh
   const {
     attributes,
@@ -34,7 +47,7 @@ export default function ListColumn({
     isDragging,
   } = useSortable({
     id: `list-${list.id}`,
-    data: { type: "list", list },
+    data: sortableData,
     handle: true,
   });
 
@@ -46,11 +59,24 @@ export default function ListColumn({
   };
 
   // 2. Ép toàn bộ cardIds về dạng String để SortableContext nhận diện chính xác
-  const safeStringCardIds = cardIds.map((id) => `card-${id}`);
+  const safeStringCardIds = useMemo(
+    () => cardIds.map((id) => `card-${id}`),
+    [cardIds],
+  );
+
+  // DEBUG: ListColumn render
+  console.log("[T1 ListColumn]", {
+    listId: list.id,
+    cardIds: safeStringCardIds,
+    isEmpty: safeStringCardIds.length === 0,
+  });
 
   return (
     <div
       ref={setNodeRef}
+      data-testid="list-column"
+      data-list-id={String(list.id)}
+      data-list-name={list.name}
       className={`board-column-wrapper${isDragging ? " board-column--dragging" : ""}`}
       style={style}
     >
@@ -62,6 +88,7 @@ export default function ListColumn({
         >
           <button
             className="list-drag-handle invisible group-hover:visible group-focus-within:visible flex items-center justify-center w-6 h-6 rounded cursor-grab shrink-0"
+            data-testid="list-drag-handle"
             {...listeners}
             {...attributes}
           >
@@ -71,7 +98,9 @@ export default function ListColumn({
               <circle cx="8" cy="13" r="1.5" />
             </svg>
           </button>
-          <h3 className="flex-1 min-w-0">{list.name}</h3>
+          <h3 className="flex-1 min-w-0" data-testid="list-title">
+            {list.name}
+          </h3>
           <button
             className="list-delete-btn"
             onClick={(e) => {
@@ -84,7 +113,11 @@ export default function ListColumn({
         </div>
 
         {/* Thân Column chứa danh sách các Card */}
-        <div className="column-cards">
+        <div
+          ref={setCardsDroppableRef}
+          data-testid="list-card-area"
+          className={`column-cards${isCardAreaOver ? " column-cards--over" : ""}`}
+        >
           <SortableContext
             items={safeStringCardIds} // Sử dụng mảng ID đã chuẩn hóa kiểu dữ liệu
             strategy={verticalListSortingStrategy}
@@ -104,6 +137,13 @@ export default function ListColumn({
               );
             })}
           </SortableContext>
+          {safeStringCardIds.length === 0 && (
+            <div
+              className="empty-list-drop-zone"
+              data-testid="empty-list-drop-zone"
+              aria-hidden="true"
+            />
+          )}
         </div>
 
         {/* Khu vực nút thêm Card nhanh */}
@@ -113,6 +153,7 @@ export default function ListColumn({
               size="sm"
               autoFocus
               className="add-card-input"
+              data-testid="add-card-input"
               value={newTitle}
               onChange={(e) => setNewTitle(e.target.value)}
               onBlur={closeAdd}
@@ -124,7 +165,11 @@ export default function ListColumn({
               placeholder="Enter card title and press Enter"
             />
           ) : (
-            <button className="add-card-btn" onClick={() => openAdd(list.id)}>
+            <button
+              className="add-card-btn"
+              data-testid="add-card-button"
+              onClick={() => openAdd(list.id)}
+            >
               + Add a card
             </button>
           )}

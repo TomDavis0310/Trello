@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsNumber } from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsInt, Min } from 'class-validator';
 
 export class CreateCardDto {
   @IsNumber()
@@ -22,7 +22,8 @@ export class MoveCardDto {
   @IsNumber()
   targetListId: number;
 
-  @IsNumber()
+  @IsInt()
+  @Min(0)
   targetPosition: number;
 }
 

@@ -1,10 +1,14 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { TrelloGateway } from '../common/gateways/trello.gateway';
 import { CreateBoardDto, UpdateBoardDto } from './dto/board.dto';
 
 @Injectable()
 export class BoardService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly gateway: TrelloGateway,
+  ) {}
 
   findAll(userId: number) {
     return this.prisma.client.board.findMany({
@@ -22,7 +26,10 @@ export class BoardService {
           include: {
             cards: {
               orderBy: { position: 'asc' },
-              include: { comments: { orderBy: { createdAt: 'asc' } }, labels: true },
+              include: {
+                comments: { orderBy: { createdAt: 'asc' } },
+                labels: true,
+              },
             },
           },
         },
@@ -37,12 +44,11 @@ export class BoardService {
       data: { userId, name: dto.name.trim() },
     });
 
-    const GAP = 10000;
     const listData = [
-      { name: 'Todo', order: GAP },
-      { name: 'In Progress', order: 2 * GAP },
-      { name: 'Review', order: 3 * GAP },
-      { name: 'Done', order: 4 * GAP },
+      { name: 'Todo', order: 0 },
+      { name: 'In Progress', order: 1 },
+      { name: 'Review', order: 2 },
+      { name: 'Done', order: 3 },
     ];
 
     await this.prisma.client.$transaction(
@@ -53,7 +59,9 @@ export class BoardService {
       ),
     );
 
-    return this.findOne(board.id, userId);
+    const result = await this.findOne(board.id, userId);
+    this.gateway.emitBoardCreated(result);
+    return result;
   }
 
   async update(id: number, userId: number, dto: UpdateBoardDto) {
@@ -62,10 +70,12 @@ export class BoardService {
     });
     if (!board) throw new NotFoundException('Board not found');
 
-    return this.prisma.client.board.update({
+    const result = await this.prisma.client.board.update({
       where: { id },
       data: { name: dto.name?.trim() },
     });
+    this.gateway.emitBoardUpdated(result);
+    return result;
   }
 
   async remove(id: number, userId: number) {
@@ -75,6 +85,7 @@ export class BoardService {
     if (!board) throw new NotFoundException('Board not found');
 
     await this.prisma.client.board.delete({ where: { id } });
+    this.gateway.emitBoardDeleted({ id, message: 'Board deleted' });
     return { message: 'Board deleted' };
   }
 }

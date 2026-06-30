@@ -34,18 +34,12 @@ export class ListController {
   }
 
   @Put(':id')
-  update(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: UpdateListDto,
-  ) {
+  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateListDto) {
     return this.listService.update(id, dto);
   }
 
   @Put(':id/reorder')
-  reorder(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: ReorderListDto,
-  ) {
+  reorder(@Param('id', ParseIntPipe) id: number, @Body() dto: ReorderListDto) {
     return this.listService.reorder(id, dto);
   }
 

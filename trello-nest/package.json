@@ -6,7 +6,7 @@
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
-    "build": "nest build && node -e \"require('fs').cpSync('generated/prisma/package.json', 'dist/generated/prisma/package.json')\"",
+    "build": "nest build && node -e \"require('fs').cpSync('generated/prisma', 'dist/generated/prisma', { recursive: true })\"",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch",
@@ -31,6 +31,7 @@
     "@nestjs/jwt": "^11.0.2",
     "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^11.0.1",
+    "@nestjs/platform-socket.io": "^11.1.27",
     "@nestjs/throttler": "^6.5.0",
     "@prisma/adapter-libsql": "^7.8.0",
     "@prisma/client": "^7.8.0",
@@ -43,6 +44,7 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "safer-buffer": "^2.1.2",
+    "socket.io": "^4.8.3",
     "unpipe": "^1.0.0"
   },
   "devDependencies": {

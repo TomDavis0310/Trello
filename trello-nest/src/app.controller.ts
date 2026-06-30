@@ -2,6 +2,7 @@ import { Controller, Get, UseGuards } from '@nestjs/common';
 import { AppService } from './app.service';
 import { AuthGuard } from './common/guards/auth.guard';
 import { CurrentUser } from './common/decorators/current-user.decorator';
+import type { JwtPayload } from './common/interfaces/jwt-payload.interface';
 
 @Controller()
 export class AppController {
@@ -9,7 +10,7 @@ export class AppController {
 
   @UseGuards(AuthGuard)
   @Get('data')
-  getData(@CurrentUser() user: any) {
+  getData(@CurrentUser() user: JwtPayload) {
     return this.appService.getFullData(user.sub);
   }
 }

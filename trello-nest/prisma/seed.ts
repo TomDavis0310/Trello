@@ -1,10 +1,9 @@
 import { PrismaClient } from '../generated/prisma/client';
 import { PrismaLibSql } from '@prisma/adapter-libsql';
+import * as bcrypt from 'bcrypt';
 
 const adapter = new PrismaLibSql({ url: process.env.DATABASE_URL || 'file:./dev.db' });
 const prisma = new PrismaClient({ adapter });
-
-import * as bcrypt from 'bcrypt';
 
 async function main() {
   const existing = await prisma.user.findUnique({ where: { email: 'demo@trello.com' } });

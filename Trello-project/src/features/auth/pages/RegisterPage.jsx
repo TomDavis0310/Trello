@@ -30,11 +30,16 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="auth-page">
-      <form className="auth-form" onSubmit={handleSubmit}>
+    <div className="auth-page" data-testid="register-page">
+      <form
+        className="auth-form"
+        onSubmit={handleSubmit}
+        data-testid="register-form"
+      >
         <h1>Register</h1>
         {error && <p className="error">{error}</p>}
         <Input size="lg"
+          data-testid="register-email"
           type="email"
           placeholder="Email"
           value={email}
@@ -43,13 +48,14 @@ export default function RegisterPage() {
           required
         />
         <Input size="lg"
+          data-testid="register-password"
           type="password"
           placeholder="Password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
         />
-        <Button type="submit" disabled={isLoading}>
+        <Button data-testid="register-submit" type="submit" disabled={isLoading}>
           {isLoading ? 'Registering...' : 'Register'}
         </Button>
         <p>

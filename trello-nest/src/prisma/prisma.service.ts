@@ -9,11 +9,12 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   public client!: PrismaClientInstance;
 
   async onModuleInit() {
-    const { PrismaClient: PrismaClientClass }: typeof Prisma = await import('../../generated/prisma/client.js');
+    const { PrismaClient: PrismaClientClass }: typeof Prisma =
+      await import('../../generated/prisma/client.js');
     const adapter = new PrismaLibSql({
       url: process.env.DATABASE_URL || 'file:./dev.db',
     });
-    this.client = new PrismaClientClass({ adapter }) as PrismaClientInstance;
+    this.client = new PrismaClientClass({ adapter });
     await this.client.$connect();
   }
 

@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { TrelloGateway } from '../common/gateways/trello.gateway';
 import {
   CreateCardDto,
   UpdateCardDto,
@@ -11,7 +12,10 @@ import {
 
 @Injectable()
 export class CardService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly gateway: TrelloGateway,
+  ) {}
 
   async findOne(id: number) {
     const card = await this.prisma.client.card.findUnique({
@@ -33,7 +37,7 @@ export class CardService {
       _max: { position: true },
     });
 
-    return this.prisma.client.card.create({
+    const card = await this.prisma.client.card.create({
       data: {
         listId: dto.listId,
         title: dto.title.trim(),
@@ -41,21 +45,25 @@ export class CardService {
       },
       include: { comments: true, labels: true },
     });
+    this.gateway.emitCardCreated(card);
+    return card;
   }
 
   async update(id: number, dto: UpdateCardDto) {
     const card = await this.prisma.client.card.findUnique({ where: { id } });
     if (!card) throw new NotFoundException('Card not found');
 
-    const data: any = {};
+    const data: { title?: string; description?: string } = {};
     if (dto.title !== undefined) data.title = dto.title.trim();
     if (dto.description !== undefined) data.description = dto.description;
 
-    return this.prisma.client.card.update({
+    const updated = await this.prisma.client.card.update({
       where: { id },
       data,
       include: { comments: { orderBy: { createdAt: 'asc' } }, labels: true },
     });
+    this.gateway.emitCardUpdated(updated);
+    return updated;
   }
 
   async remove(id: number) {
@@ -66,6 +74,7 @@ export class CardService {
 
     await this.renumberList(card.listId);
 
+    this.gateway.emitCardDeleted({ id, message: 'Card deleted' });
     return { message: 'Card deleted' };
   }
 
@@ -111,7 +120,10 @@ export class CardService {
           where: { listId: dto.targetListId },
           orderBy: { position: 'asc' },
         });
-        targetCards.splice(dto.targetPosition, 0, { ...card, listId: dto.targetListId });
+        targetCards.splice(dto.targetPosition, 0, {
+          ...card,
+          listId: dto.targetListId,
+        });
         for (let i = 0; i < targetCards.length; i++) {
           await tx.card.update({
             where: { id: targetCards[i].id },
@@ -132,25 +144,31 @@ export class CardService {
       include: { comments: { orderBy: { createdAt: 'asc' } }, labels: true },
     });
 
-    return {
+    const result = {
       sourceListId,
       targetListId: dto.targetListId,
       sourceCards,
       targetCards,
     };
+    this.gateway.emitCardMoved(result);
+    return result;
   }
 
   async addComment(cardId: number, dto: AddCommentDto) {
-    const card = await this.prisma.client.card.findUnique({ where: { id: cardId } });
+    const card = await this.prisma.client.card.findUnique({
+      where: { id: cardId },
+    });
     if (!card) throw new NotFoundException('Card not found');
 
-    return this.prisma.client.comment.create({
+    const comment = await this.prisma.client.comment.create({
       data: {
         cardId,
         text: dto.text,
         author: dto.author || 'Anonymous',
       },
     });
+    this.gateway.emitCommentAdded(comment);
+    return comment;
   }
 
   async removeComment(cardId: number, commentId: number) {
@@ -160,20 +178,25 @@ export class CardService {
     if (!comment) throw new NotFoundException('Comment not found');
 
     await this.prisma.client.comment.delete({ where: { id: commentId } });
+    this.gateway.emitCommentDeleted({ id: commentId, message: 'Comment deleted' });
     return { message: 'Comment deleted' };
   }
 
   async addLabel(cardId: number, dto: AddLabelDto) {
-    const card = await this.prisma.client.card.findUnique({ where: { id: cardId } });
+    const card = await this.prisma.client.card.findUnique({
+      where: { id: cardId },
+    });
     if (!card) throw new NotFoundException('Card not found');
 
-    return this.prisma.client.label.create({
+    const label = await this.prisma.client.label.create({
       data: {
         cardId,
         color: dto.color || '',
         text: dto.text || '',
       },
     });
+    this.gateway.emitLabelAdded(label);
+    return label;
   }
 
   async removeLabel(cardId: number, labelId: number) {
@@ -183,18 +206,23 @@ export class CardService {
     if (!label) throw new NotFoundException('Label not found');
 
     await this.prisma.client.label.delete({ where: { id: labelId } });
+    this.gateway.emitLabelRemoved({ id: labelId, message: 'Label removed' });
     return { message: 'Label removed' };
   }
 
   async setDueDate(cardId: number, dto: SetDueDateDto) {
-    const card = await this.prisma.client.card.findUnique({ where: { id: cardId } });
+    const card = await this.prisma.client.card.findUnique({
+      where: { id: cardId },
+    });
     if (!card) throw new NotFoundException('Card not found');
 
-    return this.prisma.client.card.update({
+    const updated = await this.prisma.client.card.update({
       where: { id: cardId },
       data: { dueDate: dto.dueDate || null },
       include: { comments: { orderBy: { createdAt: 'asc' } }, labels: true },
     });
+    this.gateway.emitCardUpdated(updated);
+    return updated;
   }
 
   private async renumberList(listId: number) {
@@ -202,11 +230,14 @@ export class CardService {
       where: { listId },
       orderBy: { position: 'asc' },
     });
-    for (let i = 0; i < cards.length; i++) {
-      await this.prisma.client.card.update({
-        where: { id: cards[i].id },
-        data: { position: i },
-      });
-    }
+
+    await this.prisma.client.$transaction(
+      cards.map((card, i) =>
+        this.prisma.client.card.update({
+          where: { id: card.id },
+          data: { position: i },
+        }),
+      ),
+    );
   }
 }

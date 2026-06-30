@@ -37,7 +37,12 @@ export default function BoardList() {
       )}
       {boards.map((board) => (
         <div key={board.id} className="board-card-wrapper">
-          <Link to={`/board/${board.id}`} className="board-card">
+          <Link
+            to={`/board/${board.id}`}
+            className="board-card"
+            data-testid="board-link"
+            data-board-name={board.name}
+          >
             {board.name}
           </Link>
           <button

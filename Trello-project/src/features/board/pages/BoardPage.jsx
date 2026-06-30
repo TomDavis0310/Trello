@@ -36,6 +36,14 @@ export default function BoardPage() {
     }
   }, [board, setCurrentBoard]);
 
+  // Kết nối WebSocket khi vào trang board
+  const connectSocket = useBoardStore((s) => s.connectSocket);
+  const disconnectBoardSocket = useBoardStore((s) => s.disconnectSocket);
+  useEffect(() => {
+    connectSocket();
+    return () => disconnectBoardSocket();
+  }, [boardId, connectSocket, disconnectBoardSocket]);
+
   const handleRename = () => {
     if (titleError) return;
     if (editTitle.trim() && editTitle !== board?.name) {

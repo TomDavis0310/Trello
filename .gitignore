@@ -1,8 +1,2 @@
-# Xóa dòng trello-next/ cũ đi và thay bằng các dòng dưới đây:
-
 node_modules/
 oxide-win32-x64-msvc-tmp/
-
-# Chỉ chặn thư mục node_modules và file môi trường BÊN TRONG trello-next thôi
-trello-next/node_modules/
-trello-next/.env*

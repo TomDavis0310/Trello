@@ -1,4 +1,4 @@
-import { useMemo, useState, useRef, useCallback } from "react";
+import { useMemo, useState, useRef, useCallback, useEffect } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -10,7 +10,6 @@ import {
 import {
   SortableContext,
   horizontalListSortingStrategy,
-  arrayMove,
 } from "@dnd-kit/sortable";
 import useBoardStore from "../../../store/boardStore";
 import ListColumn from "./ListColumn";
@@ -41,6 +40,55 @@ function buildCardMap(cards) {
   return map;
 }
 
+function normalizeDndId(id) {
+  return String(id).replace(/^(?:list-drop-|card-|list-)/, "");
+}
+
+function resolveRawOverId(over) {
+  const overType = over?.data?.current?.type;
+  const overListId = over?.data?.current?.listId;
+
+  if (overType === "list" && overListId != null) {
+    return String(overListId);
+  }
+
+  return normalizeDndId(over?.id ?? "");
+}
+
+function areCardsByListEqual(a, b) {
+  if (a === b) return true;
+  if (!a || !b) return false;
+
+  const keysA = Object.keys(a);
+  const keysB = Object.keys(b);
+
+  if (keysA.length !== keysB.length) return false;
+
+  for (const key of keysA) {
+    const listA = a[key] || EMPTY_ITEMS;
+    const listB = b[key] || EMPTY_ITEMS;
+
+    if (listA.length !== listB.length) return false;
+
+    for (let index = 0; index < listA.length; index += 1) {
+      if (listA[index] !== listB[index]) return false;
+    }
+  }
+
+  return true;
+}
+
+function areCardIdListsEqual(a = EMPTY_ITEMS, b = EMPTY_ITEMS) {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+
+  for (let index = 0; index < a.length; index += 1) {
+    if (a[index] !== b[index]) return false;
+  }
+
+  return true;
+}
+
 function findContainer(cardId, cardStructure) {
   for (const listId of Object.keys(cardStructure)) {
     if (cardStructure[listId].includes(String(cardId))) {
@@ -50,6 +98,104 @@ function findContainer(cardId, cardStructure) {
   return null;
 }
 
+function resolveOverListId(rawOverId, overType, cardStructure) {
+  const containingListId = findContainer(rawOverId, cardStructure);
+  if (containingListId) return containingListId;
+  if (cardStructure[rawOverId] || overType === "list") return rawOverId;
+  return null;
+}
+
+function getDropRect(over, overType) {
+  const currentRect = over.rect?.current;
+
+  if (overType === "card") {
+    return (
+      currentRect?.translated ||
+      currentRect?.initial ||
+      over.rect?.translated ||
+      over.rect?.initial ||
+      over.rect
+    );
+  }
+
+  if (overType === "list") {
+    return (
+      currentRect?.translated ||
+      currentRect?.initial ||
+      over.rect?.translated ||
+      over.rect?.initial ||
+      over.rect
+    );
+  }
+
+  return (
+    currentRect?.translated ||
+    currentRect?.initial ||
+    over.rect?.translated ||
+    over.rect?.initial ||
+    over.rect
+  );
+}
+
+// Xác định vị trí chèn (đầu/cuối) khi drop vào list dựa trên cursor Y
+function getDropIndex(event, over, overType = over.data.current?.type) {
+  // activatorEvent is the pointerdown event (drag start), NOT the current
+  // cursor position. Adding delta.y gives the actual cursor Y at drop/over time.
+  const cursorY = (event.activatorEvent?.clientY ?? 0) + (event.delta?.y ?? 0);
+  const r = getDropRect(over, overType);
+  if (r?.top != null && r?.height != null && r.height > 0) {
+    return cursorY > r.top + r.height / 2 ? 'bottom' : 'top';
+  }
+  return 'top';
+}
+
+function buildExpectedCardsByList(
+  cards,
+  sourceListId,
+  targetListId,
+  activeCardId,
+  targetIndex,
+) {
+  const nextCardsByList = buildCardsByList(cards);
+  const normalizedTargetIndex = Math.max(0, targetIndex);
+
+  if (sourceListId === targetListId) {
+    const sameListCards = (nextCardsByList[sourceListId] || []).filter(
+      (id) => id !== activeCardId,
+    );
+
+    sameListCards.splice(
+      Math.min(normalizedTargetIndex, sameListCards.length),
+      0,
+      activeCardId,
+    );
+
+    return {
+      ...nextCardsByList,
+      [sourceListId]: sameListCards,
+    };
+  }
+
+  const sourceCards = (nextCardsByList[sourceListId] || []).filter(
+    (id) => id !== activeCardId,
+  );
+  const targetCards = (nextCardsByList[targetListId] || []).filter(
+    (id) => id !== activeCardId,
+  );
+
+  targetCards.splice(
+    Math.min(normalizedTargetIndex, targetCards.length),
+    0,
+    activeCardId,
+  );
+
+  return {
+    ...nextCardsByList,
+    [sourceListId]: sourceCards,
+    [targetListId]: targetCards,
+  };
+}
+
 export default function BoardContent({ boardId }) {
   // --- LẤY DỮ LIỆU & ACTIONS TỪ ZUSTAND STORE ---
   const allCards = useBoardStore((s) => s.cards);
@@ -57,8 +203,7 @@ export default function BoardContent({ boardId }) {
   const createCard = useBoardStore((s) => s.createCard);
   const createList = useBoardStore((s) => s.createList);
   const deleteList = useBoardStore((s) => s.deleteList);
-  const moveCard = useBoardStore((s) => s.moveCard);
-  const moveList = useBoardStore((s) => s.moveList);
+
 
   // --- LỌC VÀ SẮP XẾP LIST THUỘC BOARD HIỆN TẠI ---
   const lists = useMemo(
@@ -93,6 +238,7 @@ export default function BoardContent({ boardId }) {
   const clonedCardsRef = useRef(null);
   const activeItemRef = useRef(null);
   const isDraggingRef = useRef(false);
+  const pendingDropRef = useRef(null);
 
   // Nếu đang kéo, ưu tiên dùng cấu trúc map tạm thời (clonedCards) để tránh lag giật UI
   const displayCardsByList = useMemo(() => {
@@ -140,7 +286,30 @@ export default function BoardContent({ boardId }) {
     activeItemRef.current = null;
     setClonedCards(null);
     clonedCardsRef.current = null;
+    pendingDropRef.current = null;
   }, []);
+
+  useEffect(() => {
+    if (!clonedCards) return;
+
+    const pendingDrop = pendingDropRef.current;
+    if (!pendingDrop) return;
+
+    const currentStoreCardsByList = buildCardsByList(allCards);
+    const matchesPendingDrop = Object.entries(pendingDrop.lists).every(
+      ([listId, expectedCardIds]) =>
+        areCardIdListsEqual(
+          currentStoreCardsByList[listId] || EMPTY_ITEMS,
+          expectedCardIds,
+        ),
+    );
+
+    if (!matchesPendingDrop) return;
+
+    setClonedCards(null);
+    clonedCardsRef.current = null;
+    pendingDropRef.current = null;
+  }, [allCards, clonedCards]);
 
   // ==========================================
   // 1. HANDLE DRAG START (Bắt đầu kéo)
@@ -151,7 +320,7 @@ export default function BoardContent({ boardId }) {
       isDraggingRef.current = true;
 
       const activeId = String(active.id);
-      const rawId = activeId.replace(/^(card-|list-)/, '');
+      const rawId = normalizeDndId(activeId);
       let type = active.data.current?.type;
 
       // Cơ chế phòng vệ tự động đoán type nếu OpenCode truyền thiếu data
@@ -162,6 +331,7 @@ export default function BoardContent({ boardId }) {
       }
 
       if (type === "card") {
+        pendingDropRef.current = null;
         const snapshot = buildCardsByList(useBoardStore.getState().cards);
         setClonedCards(snapshot);
         clonedCardsRef.current = snapshot;
@@ -171,6 +341,7 @@ export default function BoardContent({ boardId }) {
         setActiveType("card");
         activeItemRef.current = { type: "card", data: cardData };
       } else if (type === "list") {
+        pendingDropRef.current = null;
         const listData =
           lists.find((l) => String(l.id) === rawId) ||
           active.data.current?.list;
@@ -183,44 +354,89 @@ export default function BoardContent({ boardId }) {
   );
 
   // ==========================================
-  // 2. HANDLE DRAG OVER (Kéo gai qua các vùng - Xử lý xuyên cột)
+  // 2. HANDLE DRAG OVER (Kéo gai qua các vùng - Xử lý xuyên cột và cùng cột)
   // ==========================================
   const handleDragOver = useCallback((event) => {
     const { active, over } = event;
-    if (!active || !over) return;
+    if (!active || !over) {
+      console.log(`[handleDragOver] EARLY RETURN: active=${!!active} over=${!!over}`);
+      return;
+    }
 
     const activeId = String(active.id);
     const overId = String(over.id);
-    if (activeId === overId) return;
+    const overType = over.data.current?.type;
+    console.log(`[handleDragOver] active.id=${activeId} over.id=${overId} overType=${overType}`);
 
-    const currentClone = clonedCardsRef.current;
-    if (!currentClone) return;
-
-    // Strip prefix for clone lookups (clone stores raw IDs)
-    const rawActiveId = activeId.replace(/^card-/, '');
-    const rawOverId = overId.replace(/^(card-|list-)/, '');
-
-    const activeListId = findContainer(rawActiveId, currentClone);
-    if (!activeListId) return;
-
-    let overListId = null;
-
-    if (findContainer(rawOverId, currentClone)) {
-      overListId = findContainer(rawOverId, currentClone);
-    } else if (currentClone[rawOverId] || over.data.current?.type === "list") {
-      overListId = rawOverId;
+    if (activeId === overId) {
+      console.log(`[handleDragOver] EARLY RETURN: same id`);
+      return;
     }
 
-    if (!overListId || activeListId === overListId) return;
+    const currentClone = clonedCardsRef.current;
+    if (!currentClone) {
+      console.log(`[handleDragOver] EARLY RETURN: no clonedCardsRef`);
+      return;
+    }
 
+    console.log("[T2 DragOver]", {
+      activeId: active?.id,
+      overId: over?.id,
+      overType: over?.data?.current?.type,
+      overData: over?.data?.current,
+    });
+
+    const rawActiveId = normalizeDndId(activeId);
+    const rawOverId = resolveRawOverId(over);
+
+    console.log("[T3 Normalize]", {
+      rawActiveId,
+      rawOverId,
+    });
+
+    console.log(`[handleDragOver] rawActiveId=${rawActiveId} rawOverId=${rawOverId}`);
+
+    const activeListId = findContainer(rawActiveId, currentClone);
+    if (!activeListId) {
+      console.log(`[handleDragOver] EARLY RETURN: activeListId not found in clone`);
+      return;
+    }
+
+    const overListId = resolveOverListId(rawOverId, overType, currentClone);
+    console.log(`[handleDragOver] activeListId=${activeListId} overListId=${overListId}`);
+    if (!overListId) {
+      console.log(`[handleDragOver] EARLY RETURN: overListId not resolved`);
+      return;
+    }
+    if (activeListId === overListId) {
+      console.log(`[handleDragOver] EARLY RETURN: same list`);
+      return;
+    }
+
+    console.log("[T4 ResolveOver]", {
+      activeListId,
+      overListId,
+      currentCloneKeys: Object.keys(currentClone || {}),
+      targetClone: currentClone?.[overListId],
+    });
+
+    console.log(`[handleDragOver] currentClone keys=${Object.keys(currentClone)}`);
+    console.log(`[handleDragOver] currentClone[overListId]=${JSON.stringify(currentClone[overListId])}`);
+
+    // Cross-list only: preview move từ active list sang over list
     const sourceCards = currentClone[activeListId].filter(
       (id) => id !== rawActiveId,
     );
     const targetCards = [...(currentClone[overListId] || [])];
+    const dropZone = getDropIndex(event, over, overType);
 
     let overIndex = targetCards.indexOf(rawOverId);
-    if (overIndex < 0) {
-      overIndex = over.data.current?.type === "list" ? 0 : targetCards.length;
+    if (overIndex >= 0 && dropZone === "bottom") {
+      overIndex += 1;
+    } else if (overIndex < 0) {
+      overIndex = overType === "list"
+        ? (dropZone === "bottom" ? targetCards.length : 0)
+        : targetCards.length;
     }
 
     const nextClone = {
@@ -233,8 +449,31 @@ export default function BoardContent({ boardId }) {
       ],
     };
 
-    setClonedCards(nextClone);
-    clonedCardsRef.current = nextClone;
+    const changed = !areCardsByListEqual(currentClone, nextClone);
+
+    console.log("[OVER_TARGET]", {
+      time: performance.now(),
+      activeId,
+      overId,
+      overType,
+      rawOverId,
+      activeListId,
+      overListId,
+      nextCloneForOverList: nextClone[overListId],
+    });
+
+    console.log("[T5 Preview]", {
+      changed,
+      sourceCards,
+      targetCards,
+      nextTargetCards: nextClone?.[overListId],
+    });
+
+    console.log(`[handleDragOver] setClonedCards=${changed} overIndex=${overIndex} targetCards.length=${targetCards.length}`);
+    if (changed) {
+      setClonedCards(nextClone);
+      clonedCardsRef.current = nextClone;
+    }
   }, []);
 
   // ==========================================
@@ -245,70 +484,129 @@ export default function BoardContent({ boardId }) {
       const { active, over } = event;
       isDraggingRef.current = false;
 
+      console.log(`[handleDragEnd] active=${active?.id} over=${over?.id} overData=${JSON.stringify(over?.data?.current)}`);
+
+      console.log("[T6 DragEnd]", {
+        activeId: active?.id,
+        overId: over?.id,
+        overType: over?.data?.current?.type,
+        overData: over?.data?.current,
+      });
+
       if (!active || !over) {
+        console.log(`[handleDragEnd] CANCEL: active=${!!active} over=${!!over}`);
         handleDragCancel();
         return;
       }
 
       const activeId = String(active.id);
       const overId = String(over.id);
-      const rawActiveId = activeId.replace(/^(card-|list-)/, '');
-      const rawOverId = overId.replace(/^(card-|list-)/, '');
+      const rawActiveId = normalizeDndId(activeId);
+      const rawOverId = resolveRawOverId(over);
       const store = useBoardStore.getState();
 
       const isCardDrag = clonedCardsRef.current !== null;
+      console.log(`[handleDragEnd] isCardDrag=${isCardDrag} rawActiveId=${rawActiveId} rawOverId=${rawOverId}`);
 
       if (isCardDrag) {
         const activeCard = store.cards.find((c) => String(c.id) === rawActiveId);
         if (!activeCard) {
+          console.log(`[handleDragEnd] CANCEL: activeCard not found in store`);
           handleDragCancel();
           return;
         }
 
-        const finalClone = clonedCardsRef.current;
         const sourceListId = String(activeCard.listId);
-        let targetListId = findContainer(rawActiveId, finalClone);
-        if (over.data.current?.type === "list") {
-          targetListId = rawOverId;
-        } else if (!targetListId) {
-          targetListId = sourceListId;
-        }
-        let targetIndex = 0;
+        const overCard = store.cards.find((c) => String(c.id) === rawOverId);
+        const resolvedOverType = over.data.current?.type ||
+          (overCard
+            ? "card"
+            : lists.some((l) => String(l.id) === rawOverId)
+              ? "list"
+              : null);
+        console.log(`[handleDragEnd] sourceListId=${sourceListId} resolvedOverType=${resolvedOverType} overCard=${overCard?.id}`);
+        console.log(`[handleDragEnd] lists.includes(rawOverId)=${lists.some((l) => String(l.id) === rawOverId)}`);
 
-        if (sourceListId === targetListId) {
-          const listCards = [...store.cards]
-            .filter((c) => String(c.listId) === targetListId)
-            .sort((a, b) => a.position - b.position)
+        const dropZone = getDropIndex(event, over, resolvedOverType);
+        const getSortedCardIds = (listId) =>
+          [...store.cards]
+            .filter((c) => String(c.listId) === String(listId))
+            .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
             .map((c) => String(c.id));
 
-          const oldIdx = listCards.indexOf(rawActiveId);
-          const newIdx = listCards.indexOf(rawOverId);
+        let targetListId = sourceListId;
+        let targetIndex = -1;
 
-          if (oldIdx !== -1 && newIdx !== -1) {
-            const reordered = arrayMove(listCards, oldIdx, newIdx);
-            targetIndex = reordered.indexOf(rawActiveId);
-          } else if (over.data.current?.type === "list" && oldIdx !== -1) {
-            targetIndex = 0;
-          } else if (oldIdx !== -1) {
-            // over có thể là 1 vị trí trống trong list (ghé vào cuối)
-            const overCard = store.cards.find((c) => String(c.id) === rawOverId);
-            if (!overCard || String(overCard.listId) === targetListId) {
-              const newIdx = listCards.indexOf(rawOverId);
-              if (newIdx >= 0) {
-                const reordered = arrayMove(listCards, oldIdx, newIdx);
-                targetIndex = reordered.indexOf(rawActiveId);
-              }
+        if (resolvedOverType === "card") {
+          if (overCard) {
+            targetListId = String(overCard.listId);
+            const targetCardIds = getSortedCardIds(targetListId).filter(
+              (id) => id !== rawActiveId,
+            );
+            const overIdx = targetCardIds.indexOf(rawOverId);
+            targetIndex = overIdx >= 0
+              ? (dropZone === "bottom" ? overIdx + 1 : overIdx)
+              : targetCardIds.length;
+            console.log(`[handleDragEnd] card branch: targetListId=${targetListId} targetIndex=${targetIndex}`);
+          } else {
+            console.log(`[handleDragEnd] card branch: overCard falsy, targetIndex stays -1`);
+          }
+        } else if (resolvedOverType === "list") {
+          targetListId = rawOverId;
+          const targetCardIds = getSortedCardIds(targetListId).filter(
+            (id) => id !== rawActiveId,
+          );
+          targetIndex = targetCardIds.length === 0
+            ? 0
+            : (dropZone === "bottom" ? targetCardIds.length : 0);
+          console.log(`[handleDragEnd] list branch: targetListId=${targetListId} targetCardIds=${JSON.stringify(targetCardIds)} targetIndex=${targetIndex}`);
+        } else {
+          console.log(`[handleDragEnd] UNKNOWN resolvedOverType=${resolvedOverType} — targetIndex stays -1, no-op`);
+        }
+
+        console.log("[END_TARGET]", {
+          time: performance.now(),
+          activeId,
+          overId,
+          overType: over.data.current?.type,
+          rawOverId,
+          resolvedOverType,
+          sourceListId,
+          targetListId,
+          targetIndex,
+          previewAtEnd: clonedCardsRef.current,
+        });
+
+        const preview = clonedCardsRef.current;
+        let previewListId = null;
+        let previewIndex = -1;
+        if (preview) {
+          for (const [plId, cardIds] of Object.entries(preview)) {
+            const idx = cardIds.indexOf(rawActiveId);
+            if (idx !== -1) {
+              previewListId = plId;
+              previewIndex = idx;
+              break;
             }
           }
-        } else if (finalClone) {
-          const targetCardIds = finalClone[targetListId] || [];
-          targetIndex = targetCardIds.indexOf(rawActiveId);
-          if (over.data.current?.type === "list") {
-            targetIndex = 0;
-          } else if (targetIndex < 0) {
-            targetIndex = targetCardIds.length;
-          }
         }
+        console.log("[END_COMPARE]", {
+          previewListId,
+          previewIndex,
+          finalTargetListId: targetListId,
+          finalTargetIndex: targetIndex,
+          match: previewListId === targetListId && previewIndex === targetIndex,
+        });
+
+        console.log("[T7 FinalTarget]", {
+          resolvedOverType,
+          rawActiveId,
+          rawOverId,
+          sourceListId,
+          targetListId,
+          targetIndex,
+          dropZone,
+        });
 
         const parsedCardId = isNaN(Number(rawActiveId))
           ? rawActiveId
@@ -317,20 +615,68 @@ export default function BoardContent({ boardId }) {
           ? targetListId
           : Number(targetListId);
 
-        store.moveCard(parsedCardId, parsedListId, targetIndex);
-      } else {
-        if (rawActiveId !== rawOverId) {
-          store.moveList(rawActiveId, rawOverId);
+        if (typeof targetIndex === "number" && targetIndex >= 0) {
+          console.log("[T8 MoveCall]", {
+            willCall: targetIndex >= 0,
+            cardId: parsedCardId,
+            targetListId: parsedListId,
+            targetIndex,
+          });
+          console.log(`[handleDragEnd] CALLING moveCard cardId=${parsedCardId} targetListId=${parsedListId} targetIndex=${targetIndex}`);
+          const expectedCardsByList = buildExpectedCardsByList(
+            store.cards,
+            sourceListId,
+            targetListId,
+            rawActiveId,
+            targetIndex,
+          );
+
+          const affectedLists =
+            sourceListId === targetListId
+              ? {
+                  [sourceListId]: expectedCardsByList[sourceListId] || EMPTY_ITEMS,
+                }
+              : {
+                  [sourceListId]: expectedCardsByList[sourceListId] || EMPTY_ITEMS,
+                  [targetListId]: expectedCardsByList[targetListId] || EMPTY_ITEMS,
+                };
+
+          pendingDropRef.current = { lists: affectedLists };
+          if (!areCardsByListEqual(clonedCardsRef.current, expectedCardsByList)) {
+            setClonedCards(expectedCardsByList);
+          }
+          clonedCardsRef.current = expectedCardsByList;
+          store.moveCard(parsedCardId, parsedListId, targetIndex);
+        } else {
+          console.log(`[handleDragEnd] SKIP moveCard: targetIndex=${targetIndex} not >= 0`);
         }
+      } else {
+        console.log(`[handleDragEnd] list drag branch (not card drag)`);
+        // List drag: chỉ chấp nhận over có type === "list"
+        if (over.data.current?.type === "list" && rawActiveId !== rawOverId) {
+          store.moveList(rawActiveId, rawOverId);
+        } else if (over.data.current?.type === "card") {
+          // closestCorners trả về card — tìm list cha của card đó
+          const overCard = store.cards.find((c) => String(c.id) === rawOverId);
+          if (overCard) {
+            const parentListId = String(overCard.listId);
+            if (parentListId !== rawActiveId) {
+              store.moveList(rawActiveId, parentListId);
+            }
+          }
+        }
+        // over không phải list cũng không phải card → cancel (no-op)
       }
 
       setActiveItem(null);
       setActiveType(null);
       activeItemRef.current = null;
-      setClonedCards(null);
-      clonedCardsRef.current = null;
+      if (!pendingDropRef.current) {
+        setClonedCards(null);
+        clonedCardsRef.current = null;
+      }
     },
-    [handleDragCancel, moveCard, moveList],
+    [handleDragCancel, lists],
   );
 
   return (
@@ -342,7 +688,7 @@ export default function BoardContent({ boardId }) {
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
     >
-      <div className="board-columns">
+      <div className="board-columns" data-testid="board-columns">
         {filterLabel && (
           <div className="filter-bar">
             <span>Filtering by label</span>
@@ -361,7 +707,7 @@ export default function BoardContent({ boardId }) {
           strategy={horizontalListSortingStrategy}
         >
           {listIds.map((listId) => {
-            const rawListId = listId.replace(/^list-/, '');
+            const rawListId = normalizeDndId(listId);
             const list = lists.find((l) => String(l.id) === rawListId);
             if (!list) return null;
 
@@ -392,6 +738,7 @@ export default function BoardContent({ boardId }) {
         <form className="add-list-form" onSubmit={handleAddList}>
           <input
             className="add-list-input"
+            data-testid="add-list-input"
             placeholder="+ Add list"
             value={listName}
             onChange={(e) => setListName(e.target.value)}

@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import useAuthStore from "../store/authStore";
 import DashboardPage from "../features/dashboard/pages/DashboardPage";
 import BoardPage from "../features/board/pages/BoardPage";
@@ -10,8 +10,14 @@ import RegisterPage from "../features/auth/pages/RegisterPage";
 // Nếu chưa đăng nhập, tự động chuyển hướng người dùng về trang `/login`.
 // Nếu đã đăng nhập, render children (trang được bảo vệ).
 function ProtectedRoute({ children }) {
+  const location = useLocation();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  const isAuthInitialized = useAuthStore((s) => s.isAuthInitialized);
+
+  if (!isAuthInitialized) return null;
+  if (!isAuthenticated) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
   return children;
 }
 

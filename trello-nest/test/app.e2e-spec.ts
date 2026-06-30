@@ -3,8 +3,9 @@ import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
+import { afterEach, beforeEach, describe, it } from 'node:test';
 
-describe('AppController (e2e)', () => {
+void describe('AppController (e2e)', () => {
   let app: INestApplication<App>;
 
   beforeEach(async () => {
@@ -16,14 +17,14 @@ describe('AppController (e2e)', () => {
     await app.init();
   });
 
-  it('/ (GET)', () => {
-    return request(app.getHttpServer())
+  void it('/ (GET)', async () => {
+    await request(app.getHttpServer())
       .get('/')
       .expect(200)
       .expect('Hello World!');
   });
 
-  afterEach(async () => {
+  void afterEach(async () => {
     await app.close();
   });
 });

@@ -2,6 +2,7 @@ import { create } from "zustand";
 import cloneDeep from "lodash/cloneDeep";
 import { devtools } from "zustand/middleware";
 import { api } from "../services/api";
+import { getSocket } from "../services/socket";
 
 const useBoardStore = create(
   devtools(
@@ -34,7 +35,12 @@ const useBoardStore = create(
         set({ isLoading: true }, false, "setCurrentBoard/start");
         try {
           const full = await api.getBoard(board.id);
-          const lists = (full.lists || []).map(({ cards, ...list }) => list);
+          const lists = (full.lists || []).map((l) => ({
+  id: l.id,
+  boardId: l.boardId,
+  name: l.name,
+  order: l.order,
+}));
           const cards = (full.lists || []).flatMap((l) => l.cards || []);
           set({ lists, cards, currentBoard: full, isLoading: false }, false, "setCurrentBoard/done");
         } catch (err) {
@@ -102,7 +108,11 @@ const useBoardStore = create(
         try {
           const list = await api.createList(boardId, name);
           set(
-            (state) => ({ lists: [...state.lists, list] }),
+            (state) => {
+              const exists = state.lists.some((l) => String(l.id) === String(list.id));
+              if (exists) return state;
+              return { lists: [...state.lists, list] };
+            },
             false,
             "createList",
           );
@@ -173,8 +183,6 @@ const useBoardStore = create(
               false,
               "moveList/success",
             );
-          } else if (reorderedLists) {
-            console.log("Format API reorderList thực tế:", reorderedLists);
           }
         } catch (err) {
           console.error("moveList error:", err);
@@ -225,7 +233,11 @@ const useBoardStore = create(
         try {
           const card = await api.createCard(listId, title);
           set(
-            (state) => ({ cards: [...state.cards, card] }),
+            (state) => {
+              const exists = state.cards.some((c) => String(c.id) === String(card.id));
+              if (exists) return state;
+              return { cards: [...state.cards, card] };
+            },
             false,
             "createCard",
           );
@@ -268,42 +280,118 @@ const useBoardStore = create(
       },
 
       moveCard: async (cardId, targetListId, targetIndex) => {
-        if (get().isMoving) return;
+        console.log(`[moveCard] ENTER cardId=${cardId} targetListId=${targetListId} targetIndex=${targetIndex} isMoving=${get().isMoving}`);
+        console.log("[T9 StoreMove]", { cardId, targetListId, targetIndex });
+        if (get().isMoving) {
+          console.log(`[moveCard] EXIT: isMoving lock prevents concurrent call`);
+          return;
+        }
         set({ isMoving: true }, false, "moveCard/lock");
 
         const prevCards = get().cards;
 
+        const cid = String(cardId);
+        const tlid = String(targetListId);
+
         try {
           // 1. Optimistic update: dịch chuyển tạm trên giao diện
-          const cid = String(cardId);
-          const tlid = String(targetListId);
 
           const card = prevCards.find((c) => String(c.id) === cid);
-          if (!card) return;
+          if (!card) {
+            console.log(`[moveCard] EXIT: card not found`);
+            return;
+          }
+
+          const sourceListId = String(card.listId);
+          const sourceCardsBefore = prevCards.filter((c) => String(c.listId) === sourceListId);
+          const targetCardsBefore = prevCards.filter((c) => String(c.listId) === tlid);
+          console.log("[T10 StoreBefore]", {
+            sourceListId,
+            sourceCards: sourceCardsBefore.map(c => c.id),
+            targetCards: targetCardsBefore.map(c => c.id),
+          });
+          console.log(`[moveCard] sourceListId=${sourceListId} sourceCardsBefore=${sourceCardsBefore.length} targetCardsBefore=${targetCardsBefore.length}`);
+          console.log(`[moveCard] sourceCardsBefore IDs: ${sourceCardsBefore.map(c => c.id)}`);
+          console.log(`[moveCard] targetCardsBefore IDs: ${targetCardsBefore.map(c => c.id)}`);
 
           const updatedCard = { ...card, listId: targetListId };
           const otherCards = prevCards.filter((c) => String(c.id) !== cid);
+          const byPosition = (a, b) => (a.position ?? 0) - (b.position ?? 0);
+          const normalizePositions = (cards) =>
+            cards.map((entry, index) => ({ ...entry, position: index }));
+          const clampIndex = (index, length) =>
+            Math.max(0, Math.min(index, length));
 
-          const targetListCards = otherCards
-            .filter((c) => String(c.listId) === tlid)
-            .reduce((acc, c) => { acc.push(c); return acc; }, []);
-          targetListCards.splice(targetIndex, 0, updatedCard);
+          let nextCards;
 
-          const restCards = otherCards.filter(
-            (c) => String(c.listId) !== tlid,
-          );
+          if (sourceListId === tlid) {
+            const reorderedListCards = otherCards
+              .filter((c) => String(c.listId) === sourceListId)
+              .sort(byPosition);
 
+            reorderedListCards.splice(
+              clampIndex(targetIndex, reorderedListCards.length),
+              0,
+              updatedCard,
+            );
+
+            const normalizedListCards = normalizePositions(reorderedListCards);
+            const untouchedCards = otherCards.filter(
+              (c) => String(c.listId) !== sourceListId,
+            );
+
+            nextCards = [...untouchedCards, ...normalizedListCards];
+          } else {
+            const nextSourceListCards = normalizePositions(
+              otherCards
+                .filter((c) => String(c.listId) === sourceListId)
+                .sort(byPosition),
+            );
+
+            const nextTargetListCards = otherCards
+              .filter((c) => String(c.listId) === tlid)
+              .sort(byPosition);
+
+            console.log(`[moveCard] nextTargetListCards BEFORE splice: length=${nextTargetListCards.length} IDs=${nextTargetListCards.map(c => c.id)}`);
+
+            nextTargetListCards.splice(
+              clampIndex(targetIndex, nextTargetListCards.length),
+              0,
+              updatedCard,
+            );
+
+            const normalizedTargetListCards = normalizePositions(nextTargetListCards);
+            const untouchedCards = otherCards.filter((c) => {
+              const listId = String(c.listId);
+              return listId !== sourceListId && listId !== tlid;
+            });
+
+            nextCards = [
+              ...untouchedCards,
+              ...nextSourceListCards,
+              ...normalizedTargetListCards,
+            ];
+          }
+
+          console.log("[T11 StoreAfter]", {
+            sourceCards: nextCards.filter(c => String(c.listId) === sourceListId).map(c => `${c.id}:${c.position}`),
+            targetCards: nextCards.filter(c => String(c.listId) === String(targetListId)).map(c => `${c.id}:${c.position}`),
+          });
+
+          console.log(`[moveCard] optimistic nextCards count=${nextCards.length}`);
           set(
-            { cards: [...restCards, ...targetListCards] },
+            { cards: nextCards },
             false,
             "moveCard/optimistic",
           );
 
           // 2. Gọi API
+          console.log(`[moveCard] CALLING API moveCard cid=${Number(cid)} targetListId=${Number(tlid)} targetPosition=${targetIndex}`);
           const res = await api.moveCard(Number(cid), {
             targetListId: Number(tlid),
             targetPosition: targetIndex,
           });
+          console.log(`[moveCard] API response:`, res);
 
           // 3. API THÀNH CÔNG: đồng bộ state từ response
           set(
@@ -363,6 +451,7 @@ const useBoardStore = create(
           );
         } finally {
           set({ isMoving: false }, false, "moveCard/unlock");
+          console.log(`[moveCard] FINISHED`);
         }
       },
 
@@ -543,6 +632,212 @@ const useBoardStore = create(
             "setDueDate/rollback",
           );
         }
+      },
+
+      connectSocket() {
+        const socket = getSocket();
+        if (!socket) return;
+        const s = get();
+
+        socket.on("board:updated", (data) => {
+          set(
+            (state) => ({
+              boards: state.boards.map((b) =>
+                Number(b.id) === Number(data.id) ? { ...b, ...data } : b,
+              ),
+              currentBoard:
+                state.currentBoard && Number(state.currentBoard.id) === Number(data.id)
+                  ? { ...state.currentBoard, ...data }
+                  : state.currentBoard,
+            }),
+            false,
+            "socket/board:updated",
+          );
+        });
+
+        socket.on("board:deleted", ({ id }) => {
+          set(
+            (state) => ({
+              boards: state.boards.filter((b) => Number(b.id) !== Number(id)),
+              lists: state.lists.filter((l) => Number(l.boardId) !== Number(id)),
+              cards: state.cards.filter((c) => {
+                const list = s.lists.find((l) => Number(l.id) === Number(c.listId));
+                return list && Number(list.boardId) !== Number(id);
+              }),
+              currentBoard:
+                state.currentBoard && Number(state.currentBoard.id) === Number(id)
+                  ? null
+                  : state.currentBoard,
+            }),
+            false,
+            "socket/board:deleted",
+          );
+        });
+
+        socket.on("list:created", (list) => {
+          set((state) => {
+            const exists = state.lists.some((l) => String(l.id) === String(list.id));
+            if (exists) return state;
+            return { lists: [...state.lists, list] };
+          }, false, "socket/list:created");
+        });
+
+        socket.on("list:updated", (data) => {
+          set(
+            (state) => ({
+              lists: state.lists.map((l) =>
+                Number(l.id) === Number(data.id) ? { ...l, ...data } : l,
+              ),
+            }),
+            false,
+            "socket/list:updated",
+          );
+        });
+
+        socket.on("list:deleted", ({ id }) => {
+          set(
+            (state) => ({
+              lists: state.lists.filter((l) => Number(l.id) !== Number(id)),
+              cards: state.cards.filter((c) => Number(c.listId) !== Number(id)),
+            }),
+            false,
+            "socket/list:deleted",
+          );
+        });
+
+        socket.on("list:reordered", (reorderedLists) => {
+          if (!Array.isArray(reorderedLists) || reorderedLists.length === 0) return;
+          const bid = Number(reorderedLists[0].boardId);
+          set(
+            (state) => ({
+              lists: [
+                ...state.lists.filter((l) => Number(l.boardId) !== bid),
+                ...reorderedLists,
+              ],
+            }),
+            false,
+            "socket/list:reordered",
+          );
+        });
+
+        socket.on("card:created", (card) => {
+          set((state) => {
+            const exists = state.cards.some((c) => String(c.id) === String(card.id));
+            if (exists) return state;
+            return { cards: [...state.cards, card] };
+          }, false, "socket/card:created");
+        });
+
+        socket.on("card:updated", (data) => {
+          set(
+            (state) => ({
+              cards: state.cards.map((c) =>
+                Number(c.id) === Number(data.id) ? { ...c, ...data } : c,
+              ),
+            }),
+            false,
+            "socket/card:updated",
+          );
+        });
+
+        socket.on("card:deleted", ({ id }) => {
+          set(
+            (state) => ({
+              cards: state.cards.filter((c) => Number(c.id) !== Number(id)),
+            }),
+            false,
+            "socket/card:deleted",
+          );
+        });
+
+        socket.on("card:moved", ({ sourceListId, targetListId, sourceCards, targetCards }) => {
+          set(
+            (state) => {
+              const srcId = Number(sourceListId);
+              const tgtId = Number(targetListId);
+              const idsToReplace = new Set([srcId, tgtId]);
+              const otherCards = state.cards.filter(
+                (c) => !idsToReplace.has(Number(c.listId)),
+              );
+              return {
+                cards: [
+                  ...otherCards,
+                  ...sourceCards,
+                  ...(srcId !== tgtId ? targetCards : []),
+                ],
+              };
+            },
+            false,
+            "socket/card:moved",
+          );
+        });
+
+        socket.on("comment:added", (comment) => {
+          set(
+            (state) => ({
+              cards: state.cards.map((c) =>
+                Number(c.id) === Number(comment.cardId)
+                  ? { ...c, comments: [...(c.comments || []), comment] }
+                  : c,
+              ),
+            }),
+            false,
+            "socket/comment:added",
+          );
+        });
+
+        socket.on("comment:deleted", ({ id }) => {
+          set(
+            (state) => ({
+              cards: state.cards.map((c) => ({
+                ...c,
+                comments: (c.comments || []).filter((cm) => Number(cm.id) !== Number(id)),
+              })),
+            }),
+            false,
+            "socket/comment:deleted",
+          );
+        });
+
+        socket.on("label:added", (label) => {
+          set(
+            (state) => ({
+              cards: state.cards.map((c) =>
+                Number(c.id) === Number(label.cardId)
+                  ? { ...c, labels: [...(c.labels || []), label] }
+                  : c,
+              ),
+            }),
+            false,
+            "socket/label:added",
+          );
+        });
+
+        socket.on("label:removed", ({ id }) => {
+          set(
+            (state) => ({
+              cards: state.cards.map((c) => ({
+                ...c,
+                labels: (c.labels || []).filter((l) => Number(l.id) !== Number(id)),
+              })),
+            }),
+            false,
+            "socket/label:removed",
+          );
+        });
+      },
+
+      disconnectSocket() {
+        const socket = getSocket();
+        if (!socket) return;
+        const events = [
+          "board:updated", "board:deleted",
+          "list:created", "list:updated", "list:deleted", "list:reordered",
+          "card:created", "card:updated", "card:deleted", "card:moved",
+          "comment:added", "comment:deleted",
+          "label:added", "label:removed",
+        ];
+        events.forEach((event) => socket.off(event));
       },
 
       clearBoardData: () => {

@@ -26,10 +26,12 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="dashboard-page">
+    <div className="dashboard-page" data-testid="dashboard-page">
       <div className="dashboard-header">
         <h1>My Boards</h1>
-        <Button onClick={() => setShowModal(true)}>+ New Board</Button>
+        <Button data-testid="new-board-button" onClick={() => setShowModal(true)}>
+          + New Board
+        </Button>
       </div>
       {/* Danh sách các board */}
       <BoardList />
@@ -42,6 +44,7 @@ export default function DashboardPage() {
         <form className="crud-form" onSubmit={handleCreate}>
           <Input
             autoFocus
+            data-testid="create-board-input"
             placeholder="Board name"
             value={boardName}
             onChange={(e) => setBoardName(e.target.value)}
@@ -51,7 +54,9 @@ export default function DashboardPage() {
             <Button variant="ghost" onClick={() => setShowModal(false)}>
               Cancel
             </Button>
-            <Button type="submit">Create</Button>
+            <Button data-testid="create-board-submit" type="submit">
+              Create
+            </Button>
           </div>
         </form>
       </Modal>

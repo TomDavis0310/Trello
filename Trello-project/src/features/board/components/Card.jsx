@@ -1,4 +1,4 @@
-  import { useState } from "react";
+  import { useMemo, useState } from "react";
   import { useSortable } from "@dnd-kit/sortable";
   import { CSS } from "@dnd-kit/utilities";
   import useBoardStore from "../../../store/boardStore";
@@ -33,6 +33,15 @@
 
     const dueStatus = getDueDateStatus(card.dueDate);
 
+    const sortableData = useMemo(
+      () => ({
+        type: "card",
+        cardId: String(card.id),
+        listId: String(card.listId),
+      }),
+      [card.id, card.listId],
+    );
+
     const {
       attributes,
       listeners,
@@ -42,7 +51,7 @@
       isDragging,
     } = useSortable({
       id: `card-${card.id}`,
-      data: { type: 'card', card },
+      data: sortableData,
       handle: true,
     });
 
@@ -96,12 +105,17 @@
       <>
         <div
           ref={setNodeRef}
+          data-testid="card"
+          data-card-id={String(card.id)}
+          data-card-title={card.title}
+          data-list-id={String(card.listId)}
           className={`card break-words group flex flex-row items-start${isDragging ? " dragging" : ""}`}
           style={style}
           onClick={() => openCardModal(card.id)}
         >
           <button
             className="card-drag-handle invisible group-hover:visible group-focus-within:visible flex items-center justify-center w-6 h-6 rounded cursor-grab shrink-0 mt-0.5"
+            data-testid="card-drag-handle"
             {...listeners}
             {...attributes}
             onClick={(e) => e.stopPropagation()}
@@ -128,7 +142,9 @@
               </div>
             )}
 
-            <p className="break-words"
+            <p
+              className="break-words"
+              data-testid="card-title"
               onClick={(e) => {
                 e.stopPropagation();
                 setTitle(card.title);

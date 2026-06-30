@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Button } from '../../../components/ui/Button'
 import { Input } from '../../../components/ui/Input'
 import useAuthStore from '../../../store/authStore'
@@ -10,6 +10,7 @@ import useAuthStore from '../../../store/authStore'
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const location = useLocation()
   const navigate = useNavigate()
   const { login, isLoading, error, isAuthenticated, clearError } = useAuthStore()
 
@@ -20,8 +21,11 @@ export default function LoginPage() {
 
   // Nếu đã đăng nhập, redirect về dashboard
   useEffect(() => {
-    if (isAuthenticated) navigate('/', { replace: true })
-  }, [isAuthenticated, navigate])
+    if (!isAuthenticated) return
+
+    const redirectTo = location.state?.from?.pathname || '/'
+    navigate(redirectTo, { replace: true })
+  }, [isAuthenticated, location.state, navigate])
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -29,11 +33,12 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="auth-page">
-      <form className="auth-form" onSubmit={handleSubmit}>
+    <div className="auth-page" data-testid="login-page">
+      <form className="auth-form" onSubmit={handleSubmit} data-testid="login-form">
         <h1>Log in</h1>
         {error && <p className="error">{error}</p>}
         <Input size="lg"
+          data-testid="login-email"
           type="email"
           placeholder="Email"
           value={email}
@@ -41,13 +46,14 @@ export default function LoginPage() {
           required
         />
         <Input size="lg"
+          data-testid="login-password"
           type="password"
           placeholder="Password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
         />
-        <Button type="submit" disabled={isLoading}>
+        <Button data-testid="login-submit" type="submit" disabled={isLoading}>
           {isLoading ? 'Logging in...' : 'Log in'}
         </Button>
         <p>
