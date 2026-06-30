@@ -11,9 +11,9 @@ import { GatewaysModule } from './common/gateways/gateways.module';
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     PrismaModule,
+    ListModule,
     AuthModule,
     BoardModule,
-    ListModule,
     CardModule,
     GatewaysModule,
   ],

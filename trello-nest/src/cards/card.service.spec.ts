@@ -61,7 +61,19 @@ describe('CardService.move()', () => {
       providers: [
         CardService,
         { provide: PrismaService, useValue: mockPrisma },
-        { provide: TrelloGateway, useValue: { emitCardMoved: jest.fn(), emitCardCreated: jest.fn(), emitCardUpdated: jest.fn(), emitCardDeleted: jest.fn(), emitCommentAdded: jest.fn(), emitCommentDeleted: jest.fn(), emitLabelAdded: jest.fn(), emitLabelRemoved: jest.fn() } },
+        {
+          provide: TrelloGateway,
+          useValue: {
+            emitCardMoved: jest.fn(),
+            emitCardCreated: jest.fn(),
+            emitCardUpdated: jest.fn(),
+            emitCardDeleted: jest.fn(),
+            emitCommentAdded: jest.fn(),
+            emitCommentDeleted: jest.fn(),
+            emitLabelAdded: jest.fn(),
+            emitLabelRemoved: jest.fn(),
+          },
+        },
       ],
     }).compile();
 

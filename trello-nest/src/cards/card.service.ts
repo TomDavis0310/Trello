@@ -178,7 +178,10 @@ export class CardService {
     if (!comment) throw new NotFoundException('Comment not found');
 
     await this.prisma.client.comment.delete({ where: { id: commentId } });
-    this.gateway.emitCommentDeleted({ id: commentId, message: 'Comment deleted' });
+    this.gateway.emitCommentDeleted({
+      id: commentId,
+      message: 'Comment deleted',
+    });
     return { message: 'Comment deleted' };
   }
 

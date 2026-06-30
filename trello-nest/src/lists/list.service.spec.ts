@@ -32,7 +32,15 @@ describe('ListService.reorder()', () => {
       providers: [
         ListService,
         { provide: PrismaService, useValue: mockPrisma },
-        { provide: TrelloGateway, useValue: { emitListCreated: jest.fn(), emitListUpdated: jest.fn(), emitListDeleted: jest.fn(), emitListReordered: jest.fn() } },
+        {
+          provide: TrelloGateway,
+          useValue: {
+            emitListCreated: jest.fn(),
+            emitListUpdated: jest.fn(),
+            emitListDeleted: jest.fn(),
+            emitListReordered: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
