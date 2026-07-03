@@ -2,6 +2,10 @@ import { create } from "zustand";
 import cloneDeep from "lodash/cloneDeep";
 import { devtools } from "zustand/middleware";
 import { api } from "../services/api";
+import {
+  applyMoveCardResponse,
+  buildOptimisticCardMove,
+} from "./boardStore.helpers";
 import { getSocket } from "../services/socket";
 
 const useBoardStore = create(
@@ -280,6 +284,12 @@ const useBoardStore = create(
       },
 
       moveCard: async (cardId, targetListId, targetIndex) => {
+        console.log("[MOVE_CARD_STORE]", {
+          cardId,
+          targetListId,
+          targetIndex,
+          isMoving: get().isMoving,
+        });
         console.log(`[moveCard] ENTER cardId=${cardId} targetListId=${targetListId} targetIndex=${targetIndex} isMoving=${get().isMoving}`);
         console.log("[T9 StoreMove]", { cardId, targetListId, targetIndex });
         if (get().isMoving) {
@@ -296,15 +306,25 @@ const useBoardStore = create(
         try {
           // 1. Optimistic update: dịch chuyển tạm trên giao diện
 
-          const card = prevCards.find((c) => String(c.id) === cid);
-          if (!card) {
+          const optimisticMove = buildOptimisticCardMove({
+            cards: prevCards,
+            cardId,
+            targetListId,
+            targetIndex,
+          });
+          if (!optimisticMove) {
             console.log(`[moveCard] EXIT: card not found`);
             return;
           }
 
-          const sourceListId = String(card.listId);
-          const sourceCardsBefore = prevCards.filter((c) => String(c.listId) === sourceListId);
-          const targetCardsBefore = prevCards.filter((c) => String(c.listId) === tlid);
+          const {
+            sourceListId,
+            sourceCardsBefore,
+            targetCardsBefore,
+            nextTargetListCardsBeforeSplice,
+            nextCards,
+          } = optimisticMove;
+
           console.log("[T10 StoreBefore]", {
             sourceListId,
             sourceCards: sourceCardsBefore.map(c => c.id),
@@ -314,68 +334,25 @@ const useBoardStore = create(
           console.log(`[moveCard] sourceCardsBefore IDs: ${sourceCardsBefore.map(c => c.id)}`);
           console.log(`[moveCard] targetCardsBefore IDs: ${targetCardsBefore.map(c => c.id)}`);
 
-          const updatedCard = { ...card, listId: targetListId };
-          const otherCards = prevCards.filter((c) => String(c.id) !== cid);
-          const byPosition = (a, b) => (a.position ?? 0) - (b.position ?? 0);
-          const normalizePositions = (cards) =>
-            cards.map((entry, index) => ({ ...entry, position: index }));
-          const clampIndex = (index, length) =>
-            Math.max(0, Math.min(index, length));
-
-          let nextCards;
-
-          if (sourceListId === tlid) {
-            const reorderedListCards = otherCards
-              .filter((c) => String(c.listId) === sourceListId)
-              .sort(byPosition);
-
-            reorderedListCards.splice(
-              clampIndex(targetIndex, reorderedListCards.length),
-              0,
-              updatedCard,
-            );
-
-            const normalizedListCards = normalizePositions(reorderedListCards);
-            const untouchedCards = otherCards.filter(
-              (c) => String(c.listId) !== sourceListId,
-            );
-
-            nextCards = [...untouchedCards, ...normalizedListCards];
-          } else {
-            const nextSourceListCards = normalizePositions(
-              otherCards
-                .filter((c) => String(c.listId) === sourceListId)
-                .sort(byPosition),
-            );
-
-            const nextTargetListCards = otherCards
-              .filter((c) => String(c.listId) === tlid)
-              .sort(byPosition);
-
-            console.log(`[moveCard] nextTargetListCards BEFORE splice: length=${nextTargetListCards.length} IDs=${nextTargetListCards.map(c => c.id)}`);
-
-            nextTargetListCards.splice(
-              clampIndex(targetIndex, nextTargetListCards.length),
-              0,
-              updatedCard,
-            );
-
-            const normalizedTargetListCards = normalizePositions(nextTargetListCards);
-            const untouchedCards = otherCards.filter((c) => {
-              const listId = String(c.listId);
-              return listId !== sourceListId && listId !== tlid;
-            });
-
-            nextCards = [
-              ...untouchedCards,
-              ...nextSourceListCards,
-              ...normalizedTargetListCards,
-            ];
+          if (nextTargetListCardsBeforeSplice) {
+            console.log(`[moveCard] nextTargetListCards BEFORE splice: length=${nextTargetListCardsBeforeSplice.length} IDs=${nextTargetListCardsBeforeSplice.map(c => c.id)}`);
           }
 
           console.log("[T11 StoreAfter]", {
             sourceCards: nextCards.filter(c => String(c.listId) === sourceListId).map(c => `${c.id}:${c.position}`),
             targetCards: nextCards.filter(c => String(c.listId) === String(targetListId)).map(c => `${c.id}:${c.position}`),
+          });
+          console.log("[OPTIMISTIC_RESULT]", {
+            cardId: cid,
+            sourceListId,
+            targetListId: tlid,
+            targetIndex,
+            sourceCards: nextCards
+              .filter((c) => String(c.listId) === sourceListId)
+              .map((c) => `${c.id}:${c.position}`),
+            targetCards: nextCards
+              .filter((c) => String(c.listId) === tlid)
+              .map((c) => `${c.id}:${c.position}`),
           });
 
           console.log(`[moveCard] optimistic nextCards count=${nextCards.length}`);
@@ -386,58 +363,41 @@ const useBoardStore = create(
           );
 
           // 2. Gọi API
+          console.log("[MOVE_PAYLOAD]", {
+            cardId: Number(cid),
+            targetListId: Number(tlid),
+            targetPosition: targetIndex,
+          });
           console.log(`[moveCard] CALLING API moveCard cid=${Number(cid)} targetListId=${Number(tlid)} targetPosition=${targetIndex}`);
           const res = await api.moveCard(Number(cid), {
             targetListId: Number(tlid),
             targetPosition: targetIndex,
           });
+          console.log("[API_MOVE_RESPONSE]", res);
           console.log(`[moveCard] API response:`, res);
 
           // 3. API THÀNH CÔNG: đồng bộ state từ response
           set(
             (state) => {
-              if (res && typeof res === "object") {
-                if (Array.isArray(res.sourceCards)) {
-                  // Format: { sourceListId, targetListId, sourceCards, targetCards }
-                  const srcId = String(res.sourceListId);
-                  const tgtId = String(res.targetListId);
-                  const idsToReplace = new Set([srcId, tgtId]);
-                  const otherCards = state.cards.filter(
-                    (c) => !idsToReplace.has(String(c.listId)),
-                  );
-                  return {
-                    cards: [
-                      ...otherCards,
-                      ...res.sourceCards,
-                      ...(srcId !== tgtId ? res.targetCards : []),
-                    ],
-                  };
-                }
-
-                if ("id" in res && "listId" in res && "position" in res) {
-                  // Format: single card object — update cục bộ
-                  const updatedId = String(res.id);
-                  return {
-                    cards: state.cards.map((c) =>
-                      String(c.id) === updatedId ? { ...c, ...res } : c,
-                    ),
-                  };
-                }
+              const nextState = applyMoveCardResponse({
+                cards: state.cards,
+                response: res,
+                cardId: cid,
+                targetListId,
+              });
+              if (nextState.shouldLogUnknownFormat) {
+                console.log("moveCard: format response không xác định:", res);
               }
-
-              // Format không xác định — log và giữ nguyên optimistic state
-              console.log("moveCard: format response không xác định:", res);
-              const updatedCard = state.cards.find((c) => String(c.id) === cid);
-              if (updatedCard) {
-                return {
-                  cards: state.cards.map((c) =>
-                    String(c.id) === cid
-                      ? { ...c, listId: targetListId }
-                      : c,
-                  ),
-                };
-              }
-              return state;
+              console.log("[FINAL_STATE_AFTER_RESPONSE]", {
+                cardId: cid,
+                targetListId: tlid,
+                finalCards: nextState.cards
+                  .filter((entry) => String(entry.listId) === tlid)
+                  .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+                  .map((entry) => `${entry.id}:${entry.position}`),
+              });
+              if (nextState.cards === state.cards) return state;
+              return { cards: nextState.cards };
             },
             false,
             "moveCard/success",

@@ -216,6 +216,35 @@ describe('boardStore — state sync from API response', () => {
     expect(cards.length).toBe(5);
   });
 
+  it('should keep card at bottom when moveCard response appends to end of target list', async () => {
+    const sourceCards = sampleCards()
+      .filter((c) => c.listId === 10 && c.id !== 1)
+      .map((c, i) => ({ ...c, position: i }));
+    const targetCards = [
+      { id: 4, listId: 20, title: 'D', position: 0, comments: [], labels: [] },
+      { id: 5, listId: 20, title: 'E', position: 1, comments: [], labels: [] },
+      { id: 1, listId: 20, title: 'A', position: 2, comments: [], labels: [] },
+    ];
+    vi.mocked(api.moveCard).mockResolvedValue({
+      sourceListId: 10,
+      targetListId: 20,
+      sourceCards,
+      targetCards,
+    });
+
+    useBoardStore.setState({ cards: sampleCards() });
+
+    await useBoardStore.getState().moveCard(1, 20, 2);
+
+    const cards = useBoardStore.getState().cards;
+    expect(cards.find((c) => c.id === 1)).toMatchObject({
+      listId: 20,
+      position: 2,
+    });
+    expect(cards.find((c) => c.id === 4).position).toBe(0);
+    expect(cards.find((c) => c.id === 5).position).toBe(1);
+  });
+
   it('should sync positions from moveCard response (same-list)', async () => {
     const renumbered = [
       { id: 2, listId: 10, title: 'B', position: 0, comments: [], labels: [] },
@@ -246,6 +275,46 @@ describe('boardStore — state sync from API response', () => {
 
     // No duplicate cards (src/dst same list → only sourceCards used)
     expect(cards.length).toBe(5);
+  });
+
+  it('should keep optimistic state when moveCard response is a single card object', async () => {
+    vi.mocked(api.moveCard).mockResolvedValue({
+      id: 1,
+      listId: 20,
+      position: 0,
+    });
+
+    useBoardStore.setState({ cards: sampleCards() });
+
+    await useBoardStore.getState().moveCard(1, 20, 0);
+
+    const cards = useBoardStore.getState().cards;
+    expect(cards.find((c) => c.id === 1)).toMatchObject({
+      listId: 20,
+      position: 0,
+    });
+    expect(cards.find((c) => c.id === 2).position).toBe(0);
+    expect(cards.find((c) => c.id === 3).position).toBe(1);
+    expect(cards.find((c) => c.id === 4).position).toBe(1);
+    expect(cards.find((c) => c.id === 5).position).toBe(2);
+  });
+
+  it('should keep optimistic state when moveCard response format is unknown', async () => {
+    vi.mocked(api.moveCard).mockResolvedValue('ok');
+
+    useBoardStore.setState({ cards: sampleCards() });
+
+    await useBoardStore.getState().moveCard(1, 20, 0);
+
+    const cards = useBoardStore.getState().cards;
+    expect(cards.find((c) => c.id === 1)).toMatchObject({
+      listId: 20,
+      position: 0,
+    });
+    expect(cards.find((c) => c.id === 2).position).toBe(0);
+    expect(cards.find((c) => c.id === 3).position).toBe(1);
+    expect(cards.find((c) => c.id === 4).position).toBe(1);
+    expect(cards.find((c) => c.id === 5).position).toBe(2);
   });
 
   it('should use reorderList response to overwrite list orders', async () => {

@@ -2,13 +2,10 @@ import { useState, useMemo } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import {
-  SortableContext,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
-import Card from "./Card";
-import { Input } from "../../../components/ui/Input";
 import ConfirmModal from "../../../components/common/ConfirmModal";
+import ListAddCardComposer from "./ListAddCardComposer";
+import ListColumnHeader from "./ListColumnHeader";
+import ListDropArea from "./ListDropArea";
 
 export default function ListColumn({
   list,
@@ -37,7 +34,6 @@ export default function ListColumn({
     data: sortableData,
   });
 
-  // 1. Khai báo useSortable cho List với ID dạng String chuẩn chỉnh
   const {
     attributes,
     listeners,
@@ -58,13 +54,11 @@ export default function ListColumn({
     transition,
   };
 
-  // 2. Ép toàn bộ cardIds về dạng String để SortableContext nhận diện chính xác
   const safeStringCardIds = useMemo(
     () => cardIds.map((id) => `card-${id}`),
     [cardIds],
   );
 
-  // DEBUG: ListColumn render
   console.log("[T1 ListColumn]", {
     listId: list.id,
     cardIds: safeStringCardIds,
@@ -81,99 +75,39 @@ export default function ListColumn({
       style={style}
     >
       <div className="board-column">
-        {/* Header Column: Nơi duy nhất chứa handle kéo thả của List */}
-        <div
-          className="column-header group"
-          style={{ justifyContent: "normal" }}
-        >
-          <button
-            className="list-drag-handle invisible group-hover:visible group-focus-within:visible flex items-center justify-center w-6 h-6 rounded cursor-grab shrink-0"
-            data-testid="list-drag-handle"
-            {...listeners}
-            {...attributes}
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-              <circle cx="8" cy="3" r="1.5" />
-              <circle cx="8" cy="8" r="1.5" />
-              <circle cx="8" cy="13" r="1.5" />
-            </svg>
-          </button>
-          <h3 className="flex-1 min-w-0" data-testid="list-title">
-            {list.name}
-          </h3>
-          <button
-            className="list-delete-btn"
-            onClick={(e) => {
-              e.stopPropagation();
-              setShowDeleteConfirm(true);
-            }}
-          >
-            &times;
-          </button>
-        </div>
+        <ListColumnHeader
+          listName={list.name}
+          dragHandleProps={{
+            ...listeners,
+            ...attributes,
+          }}
+          onDeleteClick={(e) => {
+            e.stopPropagation();
+            setShowDeleteConfirm(true);
+          }}
+        />
 
-        {/* Thân Column chứa danh sách các Card */}
-        <div
-          ref={setCardsDroppableRef}
-          data-testid="list-card-area"
-          className={`column-cards${isCardAreaOver ? " column-cards--over" : ""}`}
-        >
-          <SortableContext
-            items={safeStringCardIds} // Sử dụng mảng ID đã chuẩn hóa kiểu dữ liệu
-            strategy={verticalListSortingStrategy}
-          >
-            {safeStringCardIds.map((cardId) => {
-              const card = cardMap[cardId];
-              if (!card) return null;
-              return (
-                <Card
-                  key={cardId}
-                  card={card}
-                  onLabelClick={(labelId) =>
-                    setFilterLabel(labelId === filterLabel ? null : labelId)
-                  }
-                  activeLabel={filterLabel}
-                />
-              );
-            })}
-          </SortableContext>
-          {safeStringCardIds.length === 0 && (
-            <div
-              className="empty-list-drop-zone"
-              data-testid="empty-list-drop-zone"
-              aria-hidden="true"
-            />
-          )}
-        </div>
+        <ListDropArea
+          cardIds={safeStringCardIds}
+          cardMap={cardMap}
+          droppableRef={setCardsDroppableRef}
+          isOver={isCardAreaOver}
+          activeLabel={filterLabel}
+          onLabelClick={(labelId) =>
+            setFilterLabel(labelId === filterLabel ? null : labelId)
+          }
+        />
 
-        {/* Khu vực nút thêm Card nhanh */}
-        <div className="add-card-area">
-          {addingFor === list.id ? (
-            <Input
-              size="sm"
-              autoFocus
-              className="add-card-input"
-              data-testid="add-card-input"
-              value={newTitle}
-              onChange={(e) => setNewTitle(e.target.value)}
-              onBlur={closeAdd}
-              error={cardError}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") submitAdd();
-                if (e.key === "Escape") closeAdd();
-              }}
-              placeholder="Enter card title and press Enter"
-            />
-          ) : (
-            <button
-              className="add-card-btn"
-              data-testid="add-card-button"
-              onClick={() => openAdd(list.id)}
-            >
-              + Add a card
-            </button>
-          )}
-        </div>
+        <ListAddCardComposer
+          isOpen={addingFor === list.id}
+          value={newTitle}
+          onChange={(e) => setNewTitle(e.target.value)}
+          onBlur={closeAdd}
+          error={cardError}
+          onSubmit={submitAdd}
+          onCancel={closeAdd}
+          onOpen={() => openAdd(list.id)}
+        />
       </div>
 
       <ConfirmModal

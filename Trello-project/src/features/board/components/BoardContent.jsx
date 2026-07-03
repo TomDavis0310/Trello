@@ -1,9 +1,5 @@
 import { useMemo, useState } from "react";
-import {
-  DndContext,
-  DragOverlay,
-  closestCorners,
-} from "@dnd-kit/core";
+import { DndContext, closestCorners } from "@dnd-kit/core";
 import {
   SortableContext,
   horizontalListSortingStrategy,
@@ -11,8 +7,10 @@ import {
 import useBoardStore from "../../../store/boardStore";
 import { buildListIds, buildCardMap, normalizeDndId } from "./dragHelpers";
 import useBoardDragAndDrop from "./useBoardDragAndDrop";
+import AddListInlineForm from "./AddListInlineForm";
+import BoardFilterBar from "./BoardFilterBar";
 import ListColumn from "./ListColumn";
-import CardDragOverlay from "./CardDragOverlay";
+import BoardDragOverlay from "./BoardDragOverlay";
 
 const EMPTY_ITEMS = [];
 
@@ -91,15 +89,7 @@ export default function BoardContent({ boardId }) {
     >
       <div className="board-columns" data-testid="board-columns">
         {filterLabel && (
-          <div className="filter-bar">
-            <span>Filtering by label</span>
-            <button
-              className="btn btn--sm btn--ghost"
-              onClick={() => setFilterLabel(null)}
-            >
-              Clear
-            </button>
-          </div>
+          <BoardFilterBar onClear={() => setFilterLabel(null)} />
         )}
 
         <SortableContext
@@ -134,28 +124,13 @@ export default function BoardContent({ boardId }) {
           })}
         </SortableContext>
 
-        <form className="add-list-form" onSubmit={handleAddList}>
-          <input
-            className="add-list-input"
-            data-testid="add-list-input"
-            placeholder="+ Add list"
-            value={listName}
-            onChange={(e) => setListName(e.target.value)}
-          />
-        </form>
+        <AddListInlineForm
+          value={listName}
+          onChange={(e) => setListName(e.target.value)}
+          onSubmit={handleAddList}
+        />
 
-        <DragOverlay>
-          {activeType === "card" && activeItem ? (
-            <CardDragOverlay card={activeItem} />
-          ) : null}
-          {activeType === "list" && activeItem ? (
-            <div className="board-column-wrapper drag-overlay">
-              <div className="board-column">
-                <h3>{activeItem.name}</h3>
-              </div>
-            </div>
-          ) : null}
-        </DragOverlay>
+        <BoardDragOverlay activeType={activeType} activeItem={activeItem} />
       </div>
     </DndContext>
   );

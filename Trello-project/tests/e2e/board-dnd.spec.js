@@ -55,6 +55,16 @@ test("drag card into empty list", async ({ page }) => {
   const sourceListName = uniqueName("source-list");
   const targetListName = uniqueName("empty-list");
   const cardTitle = uniqueName("empty-drop-card");
+  let moveRequestCount = 0;
+
+  page.on("request", (request) => {
+    if (
+      request.method() === "PUT" &&
+      /\/api\/cards\/[^/]+\/move$/.test(request.url())
+    ) {
+      moveRequestCount += 1;
+    }
+  });
 
   await addList(page, sourceListName);
   await addList(page, targetListName);
@@ -64,8 +74,14 @@ test("drag card into empty list", async ({ page }) => {
     page,
     cardByTitle(listByName(page, sourceListName), cardTitle),
     listCardArea(page, targetListName),
+    {
+      beforeDrop: async () => {
+        expect(moveRequestCount).toBe(0);
+      },
+    },
   );
 
+  await expect.poll(() => moveRequestCount).toBe(1);
   await expect(cardByTitle(listByName(page, targetListName), cardTitle)).toHaveCount(1);
   await expect(cardByTitle(listByName(page, sourceListName), cardTitle)).toHaveCount(0);
 });
@@ -122,6 +138,55 @@ test("cross-list insert", async ({ page }) => {
     cardB,
     cardA,
     cardC,
+  ]);
+  await expect(cardByTitle(sourceList, cardA)).toHaveCount(0);
+});
+
+test("cross-list append to target bottom", async ({ page }) => {
+  await setupBoard(page);
+
+  const sourceListName = uniqueName("from-list-bottom");
+  const targetListName = uniqueName("to-list-bottom");
+  const cardA = uniqueName("move-bottom");
+  const cardB = uniqueName("target-bottom-b");
+  const cardC = uniqueName("target-bottom-c");
+  let moveRequestCount = 0;
+
+  page.on("request", (request) => {
+    if (
+      request.method() === "PUT" &&
+      /\/api\/cards\/[^/]+\/move$/.test(request.url())
+    ) {
+      moveRequestCount += 1;
+    }
+  });
+
+  await addList(page, sourceListName);
+  await addList(page, targetListName);
+  await addCard(page, sourceListName, cardA);
+  await addCard(page, targetListName, cardB);
+  await addCard(page, targetListName, cardC);
+
+  const sourceList = listByName(page, sourceListName);
+  const targetList = listByName(page, targetListName);
+
+  await dragCardToTarget(
+    page,
+    cardByTitle(sourceList, cardA),
+    listCardArea(page, targetListName),
+    {
+      targetPosition: "bottom",
+      beforeDrop: async () => {
+        expect(moveRequestCount).toBe(0);
+      },
+    },
+  );
+
+  await expect.poll(() => moveRequestCount).toBe(1);
+  await expect.poll(async () => getCardTitles(targetList)).toEqual([
+    cardB,
+    cardC,
+    cardA,
   ]);
   await expect(cardByTitle(sourceList, cardA)).toHaveCount(0);
 });

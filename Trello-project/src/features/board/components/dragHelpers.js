@@ -126,6 +126,21 @@ export function getDropIndex(
   overType = over?.data?.current?.type,
   active = null,
 ) {
+  const cursorY =
+    typeof event.activatorEvent?.clientY === "number"
+      ? event.activatorEvent.clientY + (event.delta?.y ?? 0)
+      : null;
+  const dropRect = getDropRect(over, overType);
+
+  if (
+    cursorY != null &&
+    dropRect?.top != null &&
+    dropRect?.height != null &&
+    dropRect.height > 0
+  ) {
+    return cursorY > dropRect.top + dropRect.height / 2 ? "bottom" : "top";
+  }
+
   if (active && over) {
     const activeRect =
       active.rect?.current?.translated || active.rect?.current?.initial;
@@ -144,11 +159,6 @@ export function getDropIndex(
     }
   }
 
-  const cursorY = (event.activatorEvent?.clientY ?? 0) + (event.delta?.y ?? 0);
-  const r = getDropRect(over, overType);
-  if (r?.top != null && r?.height != null && r.height > 0) {
-    return cursorY > r.top + r.height / 2 ? "bottom" : "top";
-  }
   return "top";
 }
 

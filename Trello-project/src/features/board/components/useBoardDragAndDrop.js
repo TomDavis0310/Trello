@@ -6,16 +6,19 @@ import {
 } from "@dnd-kit/core";
 import useBoardStore from "../../../store/boardStore";
 import {
-  EMPTY_ITEMS,
+  buildCardDragPreviewState,
+  buildPendingDropState,
+  matchesPendingDropState,
+  resolveActiveDragType,
+  resolveCardDragOverType,
+  resolveCardOverCardTarget,
+  resolveCardOverListTarget,
+} from "./boardDragFlowHelpers";
+import {
   buildCardsByList,
   normalizeDndId,
   resolveRawOverId,
   areCardsByListEqual,
-  areCardIdListsEqual,
-  findContainer,
-  resolveOverListId,
-  getDropIndex,
-  buildExpectedCardsByList,
 } from "./dragHelpers";
 
 export default function useBoardDragAndDrop({ lists, cardMap }) {
@@ -58,13 +61,11 @@ export default function useBoardDragAndDrop({ lists, cardMap }) {
 
       const activeId = String(active.id);
       const rawId = normalizeDndId(activeId);
-      let type = active.data.current?.type;
-
-      if (!type) {
-        const currentStoreCards = useBoardStore.getState().cards;
-        const isCard = currentStoreCards.some((c) => String(c.id) === rawId);
-        type = isCard ? "card" : "list";
-      }
+      const type = resolveActiveDragType({
+        explicitType: active.data.current?.type,
+        rawId,
+        cards: useBoardStore.getState().cards,
+      });
 
       if (type === "card") {
         pendingDropRef.current = null;
@@ -90,66 +91,43 @@ export default function useBoardDragAndDrop({ lists, cardMap }) {
   );
 
   const handleDragOver = useCallback((event) => {
+    if (!isDraggingRef.current) return;
+
     const { active, over } = event;
     if (!active || !over) return;
 
-    const activeId = String(active.id);
-    const overId = String(over.id);
-    const overType = over.data.current?.type;
+    const previewState = buildCardDragPreviewState({
+      event,
+      active,
+      over,
+      currentClone: clonedCardsRef.current,
+    });
+    if (!previewState) return;
 
-    if (activeId === overId) return;
-
-    const currentClone = clonedCardsRef.current;
-    if (!currentClone) return;
-
-    const rawActiveId = normalizeDndId(activeId);
-    const rawOverId = resolveRawOverId(over);
-
-    const activeListId = findContainer(rawActiveId, currentClone);
-    if (!activeListId) return;
-
-    const overListId = resolveOverListId(rawOverId, overType, currentClone);
-    if (!overListId) return;
-    if (activeListId === overListId) return;
-
-    const sourceCards = currentClone[activeListId].filter(
-      (id) => id !== rawActiveId,
-    );
-    const targetCards = [...(currentClone[overListId] || [])];
-
-    let overIndex = targetCards.indexOf(rawOverId);
-    if (overIndex >= 0) {
-      const isBelow =
-        getDropIndex(event, over, "card", active) === "bottom";
-      overIndex += isBelow ? 1 : 0;
-    } else {
-      overIndex = targetCards.length;
-    }
-
-    console.log(
-      `[DnD] OVER_TARGET | activeId=${rawActiveId} overId=${rawOverId} sourceListId=${activeListId} targetListId=${overListId} overIndex=${overIndex} branch=CROSS_LIST_CARD`,
+    const changed = !areCardsByListEqual(
+      clonedCardsRef.current,
+      previewState.nextClone,
     );
 
-    const nextClone = {
-      ...currentClone,
-      [activeListId]: sourceCards,
-      [overListId]: [
-        ...targetCards.slice(0, overIndex),
-        rawActiveId,
-        ...targetCards.slice(overIndex),
-      ],
-    };
-
-    const changed = !areCardsByListEqual(currentClone, nextClone);
+    console.log("[DND_OVER_PREVIEW]", {
+      activeId: previewState.rawActiveId,
+      overId: previewState.rawOverId,
+      sourceListId: previewState.activeListId,
+      targetListId: previewState.overListId,
+      overIndex: previewState.overIndex,
+      changed,
+    });
 
     if (changed) {
-      setClonedCards(nextClone);
-      clonedCardsRef.current = nextClone;
+      setClonedCards(previewState.nextClone);
+      clonedCardsRef.current = previewState.nextClone;
     }
   }, []);
 
   const handleDragEnd = useCallback(
     (event) => {
+      if (!isDraggingRef.current) return;
+
       const { active, over } = event;
       isDraggingRef.current = false;
 
@@ -176,19 +154,12 @@ export default function useBoardDragAndDrop({ lists, cardMap }) {
 
         const sourceListId = String(activeCard.listId);
         const overCard = store.cards.find((c) => String(c.id) === rawOverId);
-        const resolvedOverType =
-          over.data.current?.type ||
-          (overCard
-            ? "card"
-            : lists.some((l) => String(l.id) === rawOverId)
-              ? "list"
-              : null);
-
-        const getSortedCardIds = (listId) =>
-          [...store.cards]
-            .filter((c) => String(c.listId) === String(listId))
-            .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
-            .map((c) => String(c.id));
+        const resolvedOverType = resolveCardDragOverType({
+          explicitType: over.data.current?.type,
+          overCard,
+          rawOverId,
+          lists,
+        });
 
         let targetListId;
         let targetIndex;
@@ -196,21 +167,37 @@ export default function useBoardDragAndDrop({ lists, cardMap }) {
 
         // === CARD_OVER_CARD ===
         if (resolvedOverType === "card" && overCard) {
-          targetListId = String(overCard.listId);
-          const targetCardIds = getSortedCardIds(targetListId).filter(
-            (id) => id !== rawActiveId,
-          );
-          const overIdx = targetCardIds.indexOf(rawOverId);
-          if (overIdx >= 0) {
-            const isBelow =
-              getDropIndex(event, over, "card", active) === "bottom";
-            targetIndex = overIdx + (isBelow ? 1 : 0);
+          const cardOverCardTarget = resolveCardOverCardTarget({
+            event,
+            over,
+            active,
+            overCard,
+            rawActiveId,
+            rawOverId,
+            cards: store.cards,
+            currentClone: clonedCardsRef.current,
+            sourceListId,
+          });
+
+          targetListId = cardOverCardTarget.targetListId;
+          targetIndex = cardOverCardTarget.targetIndex;
+          console.log("[END_TARGET_INDEX]", {
+            branch: "CARD_OVER_CARD",
+            activeId: rawActiveId,
+            rawOverId,
+            sourceListId,
+            targetListId,
+            targetIndex,
+            overIdx: cardOverCardTarget.overIdx,
+            isBelow: cardOverCardTarget.isBelow,
+            usedPreviewTarget: cardOverCardTarget.usedPreviewTarget,
+          });
+          if (cardOverCardTarget.overIdx >= 0) {
             debugBranch = "CARD_OVER_CARD";
             console.log(
-              `[DnD] END_${debugBranch} | activeId=${rawActiveId} overId=${rawOverId} sourceListId=${sourceListId} targetListId=${targetListId} overIdx=${overIdx} targetIndex=${targetIndex} isBelow=${isBelow}`,
+              `[DnD] END_${debugBranch} | activeId=${rawActiveId} overId=${rawOverId} sourceListId=${sourceListId} targetListId=${targetListId} overIdx=${cardOverCardTarget.overIdx} targetIndex=${targetIndex} isBelow=${cardOverCardTarget.isBelow}`,
             );
           } else {
-            targetIndex = targetCardIds.length;
             debugBranch = "CARD_OVER_CARD_FALLBACK";
             console.log(
               `[DnD] END_${debugBranch} | activeId=${rawActiveId} overId=${rawOverId} targetListId=${targetListId} fallbackIndex=${targetIndex}`,
@@ -221,14 +208,24 @@ export default function useBoardDragAndDrop({ lists, cardMap }) {
         // === CARD_OVER_LIST / EMPTY_LIST ===
         else if (resolvedOverType === "list") {
           targetListId = rawOverId;
-          const targetCardIds = getSortedCardIds(targetListId).filter(
-            (id) => id !== rawActiveId,
-          );
-          targetIndex =
-            targetCardIds.length === 0 ? 0 : targetCardIds.length;
+          const cardOverListTarget = resolveCardOverListTarget({
+            cards: store.cards,
+            rawActiveId,
+            targetListId,
+          });
+          targetIndex = cardOverListTarget.targetIndex;
+          console.log("[END_TARGET_INDEX]", {
+            branch: "CARD_OVER_LIST",
+            activeId: rawActiveId,
+            rawOverId,
+            sourceListId,
+            targetListId,
+            targetIndex,
+            targetCardCount: cardOverListTarget.targetCardCount,
+          });
           debugBranch = "CARD_OVER_LIST";
           console.log(
-            `[DnD] END_${debugBranch} | activeId=${rawActiveId} targetListId=${targetListId} targetCardCount=${targetCardIds.length} targetIndex=${targetIndex}`,
+            `[DnD] END_${debugBranch} | activeId=${rawActiveId} targetListId=${targetListId} targetCardCount=${cardOverListTarget.targetCardCount} targetIndex=${targetIndex}`,
           );
         }
 
@@ -250,26 +247,13 @@ export default function useBoardDragAndDrop({ lists, cardMap }) {
           : Number(targetListId);
 
         if (typeof targetIndex === "number" && targetIndex >= 0) {
-          const expectedCardsByList = buildExpectedCardsByList(
-            store.cards,
+          const { expectedCardsByList, affectedLists } = buildPendingDropState({
+            cards: store.cards,
             sourceListId,
             targetListId,
             rawActiveId,
             targetIndex,
-          );
-
-          const affectedLists =
-            sourceListId === targetListId
-              ? {
-                  [sourceListId]:
-                    expectedCardsByList[sourceListId] || EMPTY_ITEMS,
-                }
-              : {
-                  [sourceListId]:
-                    expectedCardsByList[sourceListId] || EMPTY_ITEMS,
-                  [targetListId]:
-                    expectedCardsByList[targetListId] || EMPTY_ITEMS,
-                };
+          });
 
           pendingDropRef.current = { lists: affectedLists };
           if (
@@ -278,6 +262,11 @@ export default function useBoardDragAndDrop({ lists, cardMap }) {
             setClonedCards(expectedCardsByList);
           }
           clonedCardsRef.current = expectedCardsByList;
+          console.log("[DND_END_MOVE_API]", {
+            cardId: parsedCardId,
+            targetListId: parsedListId,
+            targetIndex,
+          });
           store.moveCard(parsedCardId, parsedListId, targetIndex);
         } else {
           handleDragCancel();
@@ -315,13 +304,10 @@ export default function useBoardDragAndDrop({ lists, cardMap }) {
     if (!pendingDrop) return;
 
     const currentStoreCardsByList = buildCardsByList(allCards);
-    const matchesPendingDrop = Object.entries(pendingDrop.lists).every(
-      ([listId, expectedCardIds]) =>
-        areCardIdListsEqual(
-          currentStoreCardsByList[listId] || EMPTY_ITEMS,
-          expectedCardIds,
-        ),
-    );
+    const matchesPendingDrop = matchesPendingDropState({
+      pendingDrop,
+      currentStoreCardsByList,
+    });
 
     if (!matchesPendingDrop) return;
 

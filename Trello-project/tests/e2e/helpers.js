@@ -143,7 +143,7 @@ export async function dragCardToTarget(
   page,
   sourceCard,
   target,
-  { targetPosition = "center" } = {},
+  { targetPosition = "center", beforeDrop = null } = {},
 ) {
   await sourceCard.scrollIntoViewIfNeeded();
   await sourceCard.hover();
@@ -172,5 +172,8 @@ export async function dragCardToTarget(
   await moveMouseSmooth(page, liftPoint, midpoint, 8, 10);
   await moveMouseSmooth(page, midpoint, targetPoint, 12, 10);
   await page.waitForTimeout(50);
+  if (beforeDrop) {
+    await beforeDrop();
+  }
   await page.mouse.up();
 }
