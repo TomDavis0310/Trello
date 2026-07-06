@@ -342,18 +342,6 @@ const useBoardStore = create(
             sourceCards: nextCards.filter(c => String(c.listId) === sourceListId).map(c => `${c.id}:${c.position}`),
             targetCards: nextCards.filter(c => String(c.listId) === String(targetListId)).map(c => `${c.id}:${c.position}`),
           });
-          console.log("[OPTIMISTIC_RESULT]", {
-            cardId: cid,
-            sourceListId,
-            targetListId: tlid,
-            targetIndex,
-            sourceCards: nextCards
-              .filter((c) => String(c.listId) === sourceListId)
-              .map((c) => `${c.id}:${c.position}`),
-            targetCards: nextCards
-              .filter((c) => String(c.listId) === tlid)
-              .map((c) => `${c.id}:${c.position}`),
-          });
 
           console.log(`[moveCard] optimistic nextCards count=${nextCards.length}`);
           set(
@@ -363,17 +351,11 @@ const useBoardStore = create(
           );
 
           // 2. Gọi API
-          console.log("[MOVE_PAYLOAD]", {
-            cardId: Number(cid),
-            targetListId: Number(tlid),
-            targetPosition: targetIndex,
-          });
           console.log(`[moveCard] CALLING API moveCard cid=${Number(cid)} targetListId=${Number(tlid)} targetPosition=${targetIndex}`);
           const res = await api.moveCard(Number(cid), {
             targetListId: Number(tlid),
             targetPosition: targetIndex,
           });
-          console.log("[API_MOVE_RESPONSE]", res);
           console.log(`[moveCard] API response:`, res);
 
           // 3. API THÀNH CÔNG: đồng bộ state từ response
@@ -388,14 +370,6 @@ const useBoardStore = create(
               if (nextState.shouldLogUnknownFormat) {
                 console.log("moveCard: format response không xác định:", res);
               }
-              console.log("[FINAL_STATE_AFTER_RESPONSE]", {
-                cardId: cid,
-                targetListId: tlid,
-                finalCards: nextState.cards
-                  .filter((entry) => String(entry.listId) === tlid)
-                  .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
-                  .map((entry) => `${entry.id}:${entry.position}`),
-              });
               if (nextState.cards === state.cards) return state;
               return { cards: nextState.cards };
             },

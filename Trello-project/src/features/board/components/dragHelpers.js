@@ -1,4 +1,4 @@
-export const EMPTY_ITEMS = [];
+const EMPTY_ITEMS = [];
 
 export function buildCardsByList(cards) {
   const map = {};
@@ -7,18 +7,6 @@ export function buildCardsByList(cards) {
     const key = String(c.listId);
     if (!map[key]) map[key] = [];
     map[key].push(String(c.id));
-  });
-  return map;
-}
-
-export function buildListIds(lists) {
-  return lists.map((l) => `list-${l.id}`);
-}
-
-export function buildCardMap(cards) {
-  const map = {};
-  cards.forEach((c) => {
-    map[`card-${c.id}`] = c;
   });
   return map;
 }
@@ -61,17 +49,6 @@ export function areCardsByListEqual(a, b) {
   return true;
 }
 
-export function areCardIdListsEqual(a = EMPTY_ITEMS, b = EMPTY_ITEMS) {
-  if (a === b) return true;
-  if (a.length !== b.length) return false;
-
-  for (let index = 0; index < a.length; index += 1) {
-    if (a[index] !== b[index]) return false;
-  }
-
-  return true;
-}
-
 export function findContainer(cardId, cardStructure) {
   for (const listId of Object.keys(cardStructure)) {
     if (cardStructure[listId].includes(String(cardId))) {
@@ -79,45 +56,6 @@ export function findContainer(cardId, cardStructure) {
     }
   }
   return null;
-}
-
-export function resolveOverListId(rawOverId, overType, cardStructure) {
-  const containingListId = findContainer(rawOverId, cardStructure);
-  if (containingListId) return containingListId;
-  if (cardStructure[rawOverId] || overType === "list") return rawOverId;
-  return null;
-}
-
-function getDropRect(over, overType) {
-  const currentRect = over.rect?.current;
-
-  if (overType === "card") {
-    return (
-      currentRect?.translated ||
-      currentRect?.initial ||
-      over.rect?.translated ||
-      over.rect?.initial ||
-      over.rect
-    );
-  }
-
-  if (overType === "list") {
-    return (
-      currentRect?.translated ||
-      currentRect?.initial ||
-      over.rect?.translated ||
-      over.rect?.initial ||
-      over.rect
-    );
-  }
-
-  return (
-    currentRect?.translated ||
-    currentRect?.initial ||
-    over.rect?.translated ||
-    over.rect?.initial ||
-    over.rect
-  );
 }
 
 export function getDropIndex(
@@ -130,7 +68,19 @@ export function getDropIndex(
     typeof event.activatorEvent?.clientY === "number"
       ? event.activatorEvent.clientY + (event.delta?.y ?? 0)
       : null;
-  const dropRect = getDropRect(over, overType);
+  const currentRect = over?.rect?.current;
+  const dropRect =
+    overType === "card" || overType === "list"
+      ? currentRect?.translated ||
+        currentRect?.initial ||
+        over?.rect?.translated ||
+        over?.rect?.initial ||
+        over?.rect
+      : currentRect?.translated ||
+        currentRect?.initial ||
+        over?.rect?.translated ||
+        over?.rect?.initial ||
+        over?.rect;
 
   if (
     cursorY != null &&
@@ -162,49 +112,163 @@ export function getDropIndex(
   return "top";
 }
 
-export function buildExpectedCardsByList(
+export function buildCardDragPreviewState({
+  event,
+  active,
+  over,
+  currentClone,
+}) {
+  const activeId = String(active.id);
+  const overId = String(over.id);
+  const overType = over.data.current?.type;
+
+  if (!currentClone) return null;
+
+  const rawActiveId = normalizeDndId(activeId);
+  const rawOverId = resolveRawOverId(over);
+
+  const activeListId = findContainer(rawActiveId, currentClone);
+  if (!activeListId) return null;
+
+  const initialSourceListId =
+    active.data.current?.listId != null
+      ? String(active.data.current.listId)
+      : active.data.current?.card?.listId != null
+        ? String(active.data.current.card.listId)
+        : activeListId;
+  const hasCrossedLists = activeListId !== initialSourceListId;
+
+  const overListId = (() => {
+    const containingListId = findContainer(rawOverId, currentClone);
+    if (containingListId) return containingListId;
+    if (currentClone[rawOverId] || overType === "list") return rawOverId;
+    return null;
+  })();
+
+  if (!overListId) return null;
+  if (activeId === overId && !hasCrossedLists) return null;
+  if (activeListId === overListId && !hasCrossedLists) return null;
+
+  const sourceCards = currentClone[activeListId].filter((id) => id !== rawActiveId);
+  const targetCards =
+    activeListId === overListId
+      ? [...sourceCards]
+      : [...(currentClone[overListId] || [])];
+
+  const isBelow = getDropIndex(event, over, "card", active) === "bottom";
+  let overIndex = targetCards.indexOf(rawOverId);
+  if (
+    activeId === overId &&
+    hasCrossedLists &&
+    activeListId === overListId
+  ) {
+    const currentPreviewIndex =
+      (currentClone[activeListId] || EMPTY_ITEMS).indexOf(rawActiveId);
+    overIndex =
+      currentPreviewIndex >= 0
+        ? currentPreviewIndex + (isBelow ? 1 : 0)
+        : targetCards.length;
+  } else if (overIndex >= 0) {
+    overIndex += isBelow ? 1 : 0;
+  } else {
+    overIndex = targetCards.length;
+  }
+
+  const reorderedTargetCards = [
+    ...targetCards.slice(0, overIndex),
+    rawActiveId,
+    ...targetCards.slice(overIndex),
+  ];
+  const nextClone =
+    activeListId === overListId
+      ? {
+          ...currentClone,
+          [overListId]: reorderedTargetCards,
+        }
+      : {
+          ...currentClone,
+          [activeListId]: sourceCards,
+          [overListId]: reorderedTargetCards,
+        };
+
+  return {
+    rawActiveId,
+    rawOverId,
+    activeListId,
+    overListId,
+    overIndex,
+    nextClone,
+  };
+}
+
+export function resolveCardOverCardTarget({
+  event,
+  over,
+  active,
+  overCard,
+  rawActiveId,
+  rawOverId,
   cards,
+  currentClone,
   sourceListId,
-  targetListId,
-  activeCardId,
-  targetIndex,
-) {
-  const nextCardsByList = buildCardsByList(cards);
-  const normalizedTargetIndex = Math.max(0, targetIndex);
+}) {
+  if (currentClone) {
+    const previewTargetListId = findContainer(rawActiveId, currentClone);
+    const previewTargetCards = previewTargetListId
+      ? currentClone[previewTargetListId] || EMPTY_ITEMS
+      : EMPTY_ITEMS;
+    const previewTargetIndex = previewTargetCards.indexOf(rawActiveId);
 
-  if (sourceListId === targetListId) {
-    const sameListCards = (nextCardsByList[sourceListId] || []).filter(
-      (id) => id !== activeCardId,
-    );
+    if (
+      previewTargetListId &&
+      previewTargetListId !== sourceListId &&
+      previewTargetIndex >= 0
+    ) {
+      const previewIsBelow =
+        rawOverId === rawActiveId
+          ? getDropIndex(event, over, "card", active) === "bottom"
+          : null;
+      const maxPreviewTargetIndex = previewTargetCards.length - 1;
+      return {
+        targetListId: previewTargetListId,
+        targetIndex:
+          previewIsBelow == null
+            ? previewTargetIndex
+            : Math.min(
+                previewTargetIndex + (previewIsBelow ? 1 : 0),
+                maxPreviewTargetIndex,
+              ),
+        overIdx: previewTargetCards.indexOf(rawOverId),
+        isBelow: previewIsBelow,
+        usedPreviewTarget: true,
+      };
+    }
+  }
 
-    sameListCards.splice(
-      Math.min(normalizedTargetIndex, sameListCards.length),
-      0,
-      activeCardId,
-    );
+  const targetListId = String(overCard.listId);
+  const targetCardIds = [...cards]
+    .filter((card) => String(card.listId) === targetListId)
+    .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+    .map((card) => String(card.id))
+    .filter((id) => id !== rawActiveId);
+  const overIdx = targetCardIds.indexOf(rawOverId);
 
+  if (overIdx >= 0) {
+    const isBelow = getDropIndex(event, over, "card", active) === "bottom";
     return {
-      ...nextCardsByList,
-      [sourceListId]: sameListCards,
+      targetListId,
+      targetIndex: overIdx + (isBelow ? 1 : 0),
+      overIdx,
+      isBelow,
+      usedPreviewTarget: false,
     };
   }
 
-  const sourceCards = (nextCardsByList[sourceListId] || []).filter(
-    (id) => id !== activeCardId,
-  );
-  const targetCards = (nextCardsByList[targetListId] || []).filter(
-    (id) => id !== activeCardId,
-  );
-
-  targetCards.splice(
-    Math.min(normalizedTargetIndex, targetCards.length),
-    0,
-    activeCardId,
-  );
-
   return {
-    ...nextCardsByList,
-    [sourceListId]: sourceCards,
-    [targetListId]: targetCards,
+    targetListId,
+    targetIndex: targetCardIds.length,
+    overIdx,
+    isBelow: null,
+    usedPreviewTarget: false,
   };
 }

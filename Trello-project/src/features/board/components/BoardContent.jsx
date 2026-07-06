@@ -5,7 +5,7 @@ import {
   horizontalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import useBoardStore from "../../../store/boardStore";
-import { buildListIds, buildCardMap, normalizeDndId } from "./dragHelpers";
+import { normalizeDndId } from "./dragHelpers";
 import useBoardDragAndDrop from "./useBoardDragAndDrop";
 import AddListInlineForm from "./AddListInlineForm";
 import BoardFilterBar from "./BoardFilterBar";
@@ -29,8 +29,14 @@ export default function BoardContent({ boardId }) {
     [allLists, boardId],
   );
 
-  const listIds = useMemo(() => buildListIds(lists), [lists]);
-  const cardMap = useMemo(() => buildCardMap(allCards), [allCards]);
+  const listIds = useMemo(() => lists.map((list) => `list-${list.id}`), [lists]);
+  const cardMap = useMemo(() => {
+    const map = {};
+    allCards.forEach((card) => {
+      map[`card-${card.id}`] = card;
+    });
+    return map;
+  }, [allCards]);
 
   const {
     activeItem,
