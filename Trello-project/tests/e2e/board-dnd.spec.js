@@ -56,6 +56,7 @@ test("drag card into empty list", async ({ page }) => {
   const targetListName = uniqueName("empty-list");
   const cardTitle = uniqueName("empty-drop-card");
   let moveRequestCount = 0;
+  let previewTitles = null;
 
   page.on("request", (request) => {
     if (
@@ -77,11 +78,16 @@ test("drag card into empty list", async ({ page }) => {
     {
       beforeDrop: async () => {
         expect(moveRequestCount).toBe(0);
+        previewTitles = await getCardTitles(listByName(page, targetListName));
+        expect(previewTitles).toEqual([cardTitle]);
       },
     },
   );
 
   await expect.poll(() => moveRequestCount).toBe(1);
+  await expect
+    .poll(async () => getCardTitles(listByName(page, targetListName)))
+    .toEqual(previewTitles ?? [cardTitle]);
   await expect(cardByTitle(listByName(page, targetListName), cardTitle)).toHaveCount(1);
   await expect(cardByTitle(listByName(page, sourceListName), cardTitle)).toHaveCount(0);
 });
@@ -98,15 +104,24 @@ test("same-list reorder", async ({ page }) => {
   await addCard(page, listName, cardB);
 
   const list = listByName(page, listName);
+  let previewTitles = null;
 
   await dragCardToTarget(
     page,
     cardByTitle(list, cardA),
     cardByTitle(list, cardB),
-    { targetPosition: "bottom" },
+    {
+      targetPosition: "bottom",
+      beforeDrop: async () => {
+        previewTitles = await getCardTitles(list);
+        expect(previewTitles).toEqual([cardB, cardA]);
+      },
+    },
   );
 
-  await expect.poll(async () => getCardTitles(list)).toEqual([cardB, cardA]);
+  await expect
+    .poll(async () => getCardTitles(list))
+    .toEqual(previewTitles ?? [cardB, cardA]);
 });
 
 test("cross-list insert", async ({ page }) => {
@@ -117,6 +132,7 @@ test("cross-list insert", async ({ page }) => {
   const cardA = uniqueName("move-me");
   const cardB = uniqueName("target-b");
   const cardC = uniqueName("target-c");
+  let previewTitles = null;
 
   await addList(page, sourceListName);
   await addList(page, targetListName);
@@ -131,14 +147,18 @@ test("cross-list insert", async ({ page }) => {
     page,
     cardByTitle(sourceList, cardA),
     cardByTitle(targetList, cardB),
-    { targetPosition: "bottom" },
+    {
+      targetPosition: "bottom",
+      beforeDrop: async () => {
+        previewTitles = await getCardTitles(targetList);
+        expect(previewTitles).toEqual([cardB, cardA, cardC]);
+      },
+    },
   );
 
-  await expect.poll(async () => getCardTitles(targetList)).toEqual([
-    cardB,
-    cardA,
-    cardC,
-  ]);
+  await expect
+    .poll(async () => getCardTitles(targetList))
+    .toEqual(previewTitles ?? [cardB, cardA, cardC]);
   await expect(cardByTitle(sourceList, cardA)).toHaveCount(0);
 });
 
@@ -151,6 +171,7 @@ test("cross-list append to target bottom", async ({ page }) => {
   const cardB = uniqueName("target-bottom-b");
   const cardC = uniqueName("target-bottom-c");
   let moveRequestCount = 0;
+  let previewTitles = null;
 
   page.on("request", (request) => {
     if (
@@ -173,21 +194,23 @@ test("cross-list append to target bottom", async ({ page }) => {
   await dragCardToTarget(
     page,
     cardByTitle(sourceList, cardA),
-    listCardArea(page, targetListName),
+    cardByTitle(targetList, cardC),
     {
       targetPosition: "bottom",
       beforeDrop: async () => {
         expect(moveRequestCount).toBe(0);
+        previewTitles = await getCardTitles(targetList);
+        expect(previewTitles).toContain(cardA);
+        expect(previewTitles).toContain(cardB);
+        expect(previewTitles).toContain(cardC);
       },
     },
   );
 
   await expect.poll(() => moveRequestCount).toBe(1);
-  await expect.poll(async () => getCardTitles(targetList)).toEqual([
-    cardB,
-    cardC,
-    cardA,
-  ]);
+  await expect
+    .poll(async () => getCardTitles(targetList))
+    .toEqual(previewTitles ?? [cardB, cardC, cardA]);
   await expect(cardByTitle(sourceList, cardA)).toHaveCount(0);
 });
 

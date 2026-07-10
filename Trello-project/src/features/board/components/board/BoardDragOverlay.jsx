@@ -1,5 +1,5 @@
 import { DragOverlay } from "@dnd-kit/core";
-import CardDragOverlay from "./CardDragOverlay";
+import CardDragOverlay from "../card/CardDragOverlay";
 
 export default function BoardDragOverlay({ activeType, activeItem }) {
   return (

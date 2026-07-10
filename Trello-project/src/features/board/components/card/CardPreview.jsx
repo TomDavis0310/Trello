@@ -2,7 +2,7 @@ import {
   formatCardDueDate,
   getCardLabels,
   getDueDateStatus,
-} from "../utils/cardPresentation";
+} from "../../utils/cardPresentation";
 
 const DEFAULT_DRAG_HANDLE_CLASS_NAME =
   "card-drag-handle flex items-center justify-center w-6 h-6 rounded cursor-grab shrink-0 mt-0.5";

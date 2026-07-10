@@ -2,7 +2,7 @@ import {
   SortableContext,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import Card from "./Card";
+import Card from "../card/Card";
 
 export default function ListDropArea({
   cardIds = [],
@@ -18,10 +18,7 @@ export default function ListDropArea({
       data-testid="list-card-area"
       className={`column-cards${isOver ? " column-cards--over" : ""}`}
     >
-      <SortableContext
-        items={cardIds}
-        strategy={verticalListSortingStrategy}
-      >
+      <SortableContext items={cardIds} strategy={verticalListSortingStrategy}>
         {cardIds.map((cardId) => {
           const card = cardMap[cardId];
           if (!card) return null;

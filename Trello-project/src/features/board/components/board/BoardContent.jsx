@@ -4,12 +4,11 @@ import {
   SortableContext,
   horizontalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import useBoardStore from "../../../store/boardStore";
-import { normalizeDndId } from "./dragHelpers";
-import useBoardDragAndDrop from "./useBoardDragAndDrop";
+import useBoardStore from "../../../../store/boardStore";
+import useBoardDragAndDrop from "../../dnd";
 import AddListInlineForm from "./AddListInlineForm";
 import BoardFilterBar from "./BoardFilterBar";
-import ListColumn from "./ListColumn";
+import ListColumn from "../list/ListColumn";
 import BoardDragOverlay from "./BoardDragOverlay";
 
 const EMPTY_ITEMS = [];
@@ -102,16 +101,14 @@ export default function BoardContent({ boardId }) {
           items={listIds}
           strategy={horizontalListSortingStrategy}
         >
-          {listIds.map((listId) => {
-            const rawListId = normalizeDndId(listId);
-            const list = lists.find((l) => String(l.id) === rawListId);
-            if (!list) return null;
-
+          {lists.map((list) => {
+            const dndListId = `list-${list.id}`;
+            const rawListId = String(list.id);
             const cardIds = displayCardsByList[rawListId] ?? EMPTY_ITEMS;
 
             return (
               <ListColumn
-                key={listId}
+                key={dndListId}
                 list={list}
                 cardIds={cardIds}
                 cardMap={cardMap}

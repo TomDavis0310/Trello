@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import ConfirmModal from "../../../components/common/ConfirmModal";
+import ConfirmModal from "../../../../components/common/ConfirmModal";
 import ListAddCardComposer from "./ListAddCardComposer";
 import ListColumnHeader from "./ListColumnHeader";
 import ListDropArea from "./ListDropArea";

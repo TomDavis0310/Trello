@@ -1,4 +1,4 @@
-import { Input } from "../../../components/ui/Input";
+import { Input } from "../../../../components/ui/Input";
 
 export default function ListAddCardComposer({
   isOpen,

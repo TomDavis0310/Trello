@@ -171,6 +171,14 @@ export async function dragCardToTarget(
   await moveMouseSmooth(page, start, liftPoint, 4, 10);
   await moveMouseSmooth(page, liftPoint, midpoint, 8, 10);
   await moveMouseSmooth(page, midpoint, targetPoint, 12, 10);
+  const settledTargetBox = await target.boundingBox();
+  if (settledTargetBox) {
+    const settledTargetPoint = pointFromBox(
+      settledTargetBox,
+      targetPosition,
+    );
+    await moveMouseSmooth(page, targetPoint, settledTargetPoint, 6, 10);
+  }
   await page.waitForTimeout(50);
   if (beforeDrop) {
     await beforeDrop();

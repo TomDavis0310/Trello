@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import BoardContent from "../components/BoardContent";
+import BoardContent from "../components/board/BoardContent";
 import { Button } from "../../../components/ui/Button";
 import { Input } from "../../../components/ui/Input";
-import CardDetailModal from "../components/CardDetailModal";
+import CardDetailModal from "../components/card/detail/CardDetailModal";
 import useBoardStore from "../../../store/boardStore";
 
 // === Board Page ===
@@ -23,7 +23,7 @@ export default function BoardPage() {
 
   // So sánh linh hoạt bằng == để nhận diện đúng cả ID dạng chuỗi lẫn dạng số từ API
   const board = boards.find((b) => b.id == boardId);
-
+  console.log("[BoardPage] Render", { boardId, board });
   const [editingName, setEditingName] = useState(false);
   const [editTitle, setEditTitle] = useState("");
   const titleError =

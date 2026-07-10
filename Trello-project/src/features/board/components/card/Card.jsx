@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import useBoardStore from "../../../store/boardStore";
-import ConfirmModal from "../../../components/common/ConfirmModal";
+import useBoardStore from "../../../../store/boardStore";
+import ConfirmModal from "../../../../components/common/ConfirmModal";
 import CardPreview from "./CardPreview";
 import CardTitleEditor from "./CardTitleEditor";
-import useCardTitleEditor from "./useCardTitleEditor";
+import useCardTitleEditor from "../../hooks/useCardTitleEditor";
 
 export default function Card({ card, onLabelClick, activeLabel }) {
   const [showDeleteModal, setShowDeleteModal] = useState(false);

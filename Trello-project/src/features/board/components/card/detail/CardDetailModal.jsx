@@ -1,8 +1,8 @@
 import { useState } from "react";
-import Modal from "../../../components/ui/Modal";
-import { Input } from "../../../components/ui/Input";
-import useBoardStore from "../../../store/boardStore";
-import useAuthStore from "../../../store/authStore";
+import Modal from "../../../../../components/ui/Modal";
+import { Input } from "../../../../../components/ui/Input";
+import useBoardStore from "../../../../../store/boardStore";
+import useAuthStore from "../../../../../store/authStore";
 import { z } from "zod";
 
 // LABEL_COLORS — bảng màu có sẵn cho label, lấy cảm hứng từ Trello
